@@ -6,23 +6,24 @@ import { cryptoWaitReady, decodeAddress, encodeAddress } from '@polkadot/util-cr
 import { IKeyringPair } from '@polkadot/types/types';
 
 import { signTransaction, transactionStatus } from './polka';
-import * as tokenUtil from './token'
+import * as tokenUtil from './token';
 
+const vec2str = (arr) => {
+  return arr.map((x) => String.fromCharCode(parseInt(x))).join('');
+};
 
-const vec2str = arr => {
-  return arr.map(x => String.fromCharCode(parseInt(x))).join('')
-}
+const str2vec = (string) => {
+  if (typeof string !== 'string') return string;
+  return Array.from(string).map((x) => x.charCodeAt(0));
+};
 
-const str2vec = string => {
-  if(typeof string !== 'string') return string;
-  return Array.from(string).map(x => x.charCodeAt(0));
-}
-
-type CrossAccountId = {
-  Substrate: string,
-} | {
-  Ethereum: string,
-}
+type CrossAccountId =
+  | {
+      Substrate: string;
+    }
+  | {
+      Ethereum: string;
+    };
 
 interface TokenParams {
   collectionId: bigint;
@@ -35,7 +36,7 @@ interface CollectionParams {
   name: string;
   description: string;
   tokenPrefix: string;
-  modeprm?: any
+  modeprm?: any;
 }
 
 class UniqueExplorer {
@@ -49,20 +50,21 @@ class UniqueExplorer {
 
   async getCollectionSchema(collectionId) {
     const collection = await this.api.query.common.collectionById(collectionId);
-    return {collection, schema: tokenUtil.decodeSchema(collection.toHuman().constOnChainSchema)};
+    return { collection, schema: tokenUtil.decodeSchema(collection.toHuman().constOnChainSchema) };
   }
 
   async getTokenData(tokenId, collectionId, schema?) {
-    if(!schema) schema = await this.getCollectionSchema(collectionId);
+    if (!schema) schema = await this.getCollectionSchema(collectionId);
     const constDataRaw = (await this.api.rpc.unique.constMetadata(collectionId, tokenId)).toHuman();
-    return {...schema, data: tokenUtil.decodeData(constDataRaw, schema.schema)};
+    return { ...schema, data: tokenUtil.decodeData(constDataRaw, schema.schema) };
   }
 
-  async getCollectionData (collectionId: bigint) {
+  async getCollectionData(collectionId: bigint) {
     const collection = await this.api.query.common.collectionById(collectionId);
-    let humanCollection = collection.toHuman(), collectionData = {id: collectionId, raw: humanCollection};
-    if(humanCollection === null) return null;
-    for(let key of ['name', 'description']) {
+    const humanCollection = collection.toHuman(),
+      collectionData = { id: collectionId, raw: humanCollection };
+    if (humanCollection === null) return null;
+    for (const key of ['name', 'description']) {
       collectionData[key] = vec2str(humanCollection[key]);
     }
     collectionData['tokensCount'] = (await this.api.rpc.unique.lastTokenId(collectionId)).toJSON();
@@ -77,7 +79,7 @@ class UniqueExplorer {
    * @return Promise({constData: string, variableData: string, owner: { substrate?: string, ethereum?: string }})
    */
   async tokenData(collectionId: bigint, tokenId: bigint) {
-    return (await this.api.query.nonfungible.tokenData(collectionId, tokenId)).toJSON()
+    return (await this.api.query.nonfungible.tokenData(collectionId, tokenId)).toJSON();
   }
 
   /**
@@ -89,92 +91,86 @@ class UniqueExplorer {
    * @return Promise({ substrate?: string, ethereum?: string })
    */
   async getTokenOwner(collectionId: bigint, tokenId: bigint) {
-    const owner = (await this.api.query.nonfungible.tokenData(collectionId, tokenId)).toJSON()
-    return owner.owner
+    const owner = (await this.api.query.nonfungible.tokenData(collectionId, tokenId)).toJSON();
+    return owner.owner;
   }
 
-  async createCollection(options: CollectionParams, label='new collection') {
-    if(typeof options.modeprm === 'undefined') options.modeprm = {nft: null};
-    let creationResult = await signTransaction(
+  async createCollection(options: CollectionParams, label = 'new collection') {
+    if (typeof options.modeprm === 'undefined') options.modeprm = { nft: null };
+    const creationResult = (await signTransaction(
       this.admin,
       this.api.tx.unique.createCollection(str2vec(options.name), str2vec(options.description), str2vec(options.tokenPrefix), options.modeprm),
-      'api.tx.unique.createCollection'
-    ) as any;
-    if(creationResult.status !== transactionStatus.SUCCESS) {
+      'api.tx.unique.createCollection',
+    )) as any;
+    if (creationResult.status !== transactionStatus.SUCCESS) {
       throw Error(`Unable to create collection for ${label}`);
     }
 
     let collectionId = null;
-    creationResult.result.events.forEach(({event: {data, method, section}}) => {
-      if ((section === 'common') && (method === 'CollectionCreated')) {
+    creationResult.result.events.forEach(({ event: { data, method, section } }) => {
+      if (section === 'common' && method === 'CollectionCreated') {
         collectionId = parseInt(data[0].toString(), 10);
       }
     });
 
-    if(collectionId === null) {
-      throw Error(`No CollectionCreated event for ${label}`)
+    if (collectionId === null) {
+      throw Error(`No CollectionCreated event for ${label}`);
     }
 
     return collectionId;
   }
 
-  async createToken(options: TokenParams, label='new token') {
-    let creationResult = await signTransaction(
+  async createToken(options: TokenParams, label = 'new token') {
+    const creationResult = (await signTransaction(
       this.admin,
-      this.api.tx.unique.createItem(options.collectionId, (typeof options.owner === 'string') ? { Substrate: options.owner } : options.owner, { nft: { const_data: options.constData, variable_data: options.variableData } }),
-      'api.tx.unique.createItem'
-    ) as any;
-    if(creationResult.status !== transactionStatus.SUCCESS) {
+      this.api.tx.unique.createItem(options.collectionId, typeof options.owner === 'string' ? { Substrate: options.owner } : options.owner, {
+        nft: { const_data: options.constData, variable_data: options.variableData },
+      }),
+      'api.tx.unique.createItem',
+    )) as any;
+    if (creationResult.status !== transactionStatus.SUCCESS) {
       throw Error(`Unable to create token for ${label}`);
     }
-    let success = false, createdCollectionId = null, tokenId = null, recipient = null;
-    creationResult.result.events.forEach(({event: {data, method, section}}) => {
+    let success = false,
+      createdCollectionId = null,
+      tokenId = null,
+      recipient = null;
+    creationResult.result.events.forEach(({ event: { data, method, section } }) => {
       if (method === 'ExtrinsicSuccess') {
         success = true;
-      } else if ((section === 'common') && (method === 'ItemCreated')) {
+      } else if (section === 'common' && method === 'ItemCreated') {
         createdCollectionId = parseInt(data[0].toString(), 10);
         tokenId = parseInt(data[1].toString(), 10);
         recipient = data[2].toJSON();
       }
     });
-    return {success, tokenId, recipient, collectionId: createdCollectionId};
+    return { success, tokenId, recipient, collectionId: createdCollectionId };
   }
 
-  async burnToken({collectionId, tokenId}) {
-    await signTransaction(
-      this.admin,
-      this.api.tx.unique.burnItem(collectionId, tokenId, 1),
-      'api.tx.unique.burnItem'
-    );
-    return !((await this.api.rpc.unique.tokenExists(collectionId, tokenId)).toJSON())
+  async burnToken({ collectionId, tokenId }) {
+    await signTransaction(this.admin, this.api.tx.unique.burnItem(collectionId, tokenId, 1), 'api.tx.unique.burnItem');
+    return !(await this.api.rpc.unique.tokenExists(collectionId, tokenId)).toJSON();
   }
 }
 
-
-type AnyAccountFormat = string
-  | { address: string }
-  | { Ethereum: string }
-  | { ethereum: string }
-  | { Substrate: string }
-  | { substrate: string }
-  | Object;
+type AnyAccountFormat = string | { address: string } | { Ethereum: string } | { ethereum: string } | { Substrate: string } | { substrate: string } | Object;
 
 type NormalizedAccountFormat = { Ethereum: string } | { Substrate: string } | any;
 
 const normalizeAccountId = (input: AnyAccountFormat): NormalizedAccountFormat => {
   if (typeof input === 'string') {
     if (input.length === 48 || input.length === 47) {
-      return {Substrate: input};
+      return { Substrate: input };
     } else if (input.length === 42 && input.startsWith('0x')) {
-      return {Ethereum: input.toLowerCase()};
+      return { Ethereum: input.toLowerCase() };
     } else if (input.length === 40 && !input.startsWith('0x')) {
-      return {Ethereum: '0x' + input.toLowerCase()};
+      return { Ethereum: '0x' + input.toLowerCase() };
     } else {
       throw new Error(`Unknown address format: "${input}"`);
     }
   }
   if ('address' in input) {
-    return {Substrate: input.address};
+    return { Substrate: input.address };
   }
   if ('Ethereum' in input) {
     return {
@@ -193,31 +189,29 @@ const normalizeAccountId = (input: AnyAccountFormat): NormalizedAccountFormat =>
   }
 
   // AccountId
-  return {Substrate: input.toString()};
-}
-
+  return { Substrate: input.toString() };
+};
 
 const privateKey = (account: string) => {
-  const keyring = new Keyring({type: 'sr25519'});
+  const keyring = new Keyring({ type: 'sr25519' });
 
   return keyring.addFromUri(account);
-}
-
+};
 
 const extractCollectionIdFromAddress = (address: string): number => {
   if (!(address.length == 42 || address.length == 40)) throw new Error('address wrong format');
   return parseInt(address.substr(address.length - 8), 16);
-}
+};
 
 const blockchainStaticFile = (filename: string): string => {
-  return fs.readFileSync(path.join(__dirname, '..', '..','..', 'blockchain', filename)).toString();
-}
+  return fs.readFileSync(path.join(__dirname, '..', '..', '..', 'blockchain', filename)).toString();
+};
 
 const seedToAddress = async (seed: string): Promise<string> => {
   await cryptoWaitReady();
-  const keyring = new Keyring({type: 'sr25519'});
+  const keyring = new Keyring({ type: 'sr25519' });
   return keyring.addFromUri(seed).address;
-}
+};
 
 const convertAddress = async (address: string, ss58Format?: number): Promise<string> => {
   await cryptoWaitReady();
@@ -226,6 +220,13 @@ const convertAddress = async (address: string, ss58Format?: number): Promise<str
 };
 
 export {
-  vec2str, str2vec, UniqueExplorer, normalizeAccountId, privateKey, extractCollectionIdFromAddress,
-  blockchainStaticFile, seedToAddress, convertAddress,
-}
+  vec2str,
+  str2vec,
+  UniqueExplorer,
+  normalizeAccountId,
+  privateKey,
+  extractCollectionIdFromAddress,
+  blockchainStaticFile,
+  seedToAddress,
+  convertAddress,
+};

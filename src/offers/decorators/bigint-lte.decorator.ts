@@ -14,12 +14,9 @@ export function BigIntLte(maxValue: number, validationOptions?: ValidationOption
       constraints: [maxValue],
       validator: {
         validate: (value, args): boolean => validateLte(value, args.constraints[0]),
-        defaultMessage: buildMessage(
-          eachPrefix => eachPrefix + '$property must not be greater than $constraint1',
-          validationOptions
-        ),
+        defaultMessage: buildMessage((eachPrefix) => eachPrefix + '$property must not be greater than $constraint1', validationOptions),
       },
     },
-    validationOptions
+    validationOptions,
   );
 }

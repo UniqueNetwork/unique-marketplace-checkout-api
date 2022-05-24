@@ -1,18 +1,5 @@
 import { ApiPromise } from '@polkadot/api';
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Headers,
-  Inject, Logger,
-  Post,
-  Query,
-  Req,
-  UseInterceptors,
-  ValidationPipe,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Inject, Logger, Post, Query, Req, UseInterceptors, ValidationPipe } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { convertAddress } from '../utils/blockchain/util';
@@ -33,7 +20,7 @@ import { TxDecoder } from './services/helpers/tx-decoder';
 import { SignatureVerifier } from './services/helpers/signature-verifier';
 import { AuctionCancelingService } from './services/auction-canceling.service';
 import { BidWithdrawService } from './services/bid-withdraw.service';
-import { TraceInterceptor } from "../utils/sentry";
+import { TraceInterceptor } from '../utils/sentry';
 import { BidsWitdrawByOwnerDto } from './responses';
 import * as fs from 'fs';
 
@@ -59,7 +46,7 @@ export class AuctionController {
     @Inject('KUSAMA_API') private kusamaApi: ApiPromise,
     @Inject('UNIQUE_API') private uniqueApi: ApiPromise,
   ) {
-    this.logger = new Logger(AuctionController.name)
+    this.logger = new Logger(AuctionController.name);
   }
 
   @Post('create_auction')
@@ -72,7 +59,9 @@ export class AuctionController {
     try {
       const txInfo = await this.txDecoder.decodeUniqueTransfer(createAuctionRequest.tx);
 
-      this.logger.debug(`Create an auction - collectionId: ${txInfo.args.collection_id},ownerAddress: ${txInfo.signerAddress}, tokenId: ${txInfo.args.item_id}`)
+      this.logger.debug(
+        `Create an auction - collectionId: ${txInfo.args.collection_id},ownerAddress: ${txInfo.signerAddress}, tokenId: ${txInfo.args.item_id}`,
+      );
       return await this.auctionCreationService.create({
         ...createAuctionRequest,
         collectionId: txInfo.args.collection_id,
@@ -80,7 +69,6 @@ export class AuctionController {
         tokenId: txInfo.args.item_id,
       });
     } catch (error) {
-
       await this.auctionCreationService.saveFailedAuction(createAuctionRequest);
 
       throw new BadRequestException(error.message);
@@ -128,11 +116,7 @@ export class AuctionController {
     description: fs.readFileSync('docs/cancel_auction.md').toString(),
   })
   @WithSignature
-  async cancelAuction(
-    @Query() query: CancelAuctionQueryDto,
-    @Headers('Authorization') authorization = '',
-    @Req() req: Request,
-  ): Promise<OfferContractAskDto> {
+  async cancelAuction(@Query() query: CancelAuctionQueryDto, @Headers('Authorization') authorization = '', @Req() req: Request): Promise<OfferContractAskDto> {
     AuctionController.checkRequestTimestamp(query.timestamp);
     const [signerAddress = '', signature = ''] = authorization.split(':');
     const queryString = req.originalUrl.split('?')[1];
@@ -144,7 +128,7 @@ export class AuctionController {
     });
 
     const ownerAddress = await convertAddress(signerAddress, this.uniqueApi.registry.chainSS58);
-    this.logger.debug
+    this.logger.debug;
     return await this.auctionCancellingService.tryCancelAuction({
       collectionId: query.collectionId,
       tokenId: query.tokenId,
@@ -208,7 +192,7 @@ export class AuctionController {
 
     await this.bidWithdrawService.withdrawBidsByBidder({
       bidderAddress,
-      auctionIds: Array.isArray(query.auctionId) ? query.auctionId : [query.auctionId]
+      auctionIds: Array.isArray(query.auctionId) ? query.auctionId : [query.auctionId],
     });
   }
 

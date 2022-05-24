@@ -1,19 +1,12 @@
-
 import { ApiProperty } from '@nestjs/swagger';
 import { ClassToDto } from '../../utils/type-generators/class-to-dto';
 import { Dto } from '../../utils/dto';
 
 export class TradesFilter {
-  @ApiProperty({ name: 'collectionId',
-    items: { type: 'integer', default: '' },
-    required: false, type: 'array', isArray: true
-  })
+  @ApiProperty({ name: 'collectionId', items: { type: 'integer', default: '' }, required: false, type: 'array', isArray: true })
   public collectionId?: number[];
 
-  @ApiProperty({ name: 'tokenId',
-    items: { type: 'integer', default: '' },
-    required: false, type: 'array', isArray: true
-  })
+  @ApiProperty({ name: 'tokenId', items: { type: 'integer', default: '' }, required: false, type: 'array', isArray: true })
   public tokenId?: number[];
 
   @ApiProperty({ required: false })
@@ -21,10 +14,10 @@ export class TradesFilter {
 
   @ApiProperty({
     name: 'traits',
-      items: { type: 'string', default: '' },
-      required: false,
-      type: 'array',
-      isArray: true
+    items: { type: 'string', default: '' },
+    required: false,
+    type: 'array',
+    isArray: true,
   })
   public traits?: string[];
 

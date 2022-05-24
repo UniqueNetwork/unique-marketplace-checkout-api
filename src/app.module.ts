@@ -17,9 +17,9 @@ import { OffersController, OffersService } from './offers';
 import { TradesController, TradesService } from './trades';
 import { HealthController, HealthService } from './utils/health';
 import { MetricsController, MetricsService } from './utils/metrics';
-import { AuctionModule } from "./auction/auction.module";
-import { BroadcastModule } from "./broadcast/broadcast.module";
-import { RequestLoggerMiddleware } from "./utils/logging/request-logger-middleware.service";
+import { AuctionModule } from './auction/auction.module';
+import { BroadcastModule } from './broadcast/broadcast.module';
+import { RequestLoggerMiddleware } from './utils/logging/request-logger-middleware.service';
 
 @Module({
   imports: [
