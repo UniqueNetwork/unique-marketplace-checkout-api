@@ -1,0 +1,12 @@
+.idea
+.vscode
+.DS_Store
+docker-compose.yml
+dist
+node_modules
+yarn.lock
+src/config/*
+!src/config/index.ts
+!src/config/global.ts
+!src/config/module.ts
+!src/config/providers.ts
