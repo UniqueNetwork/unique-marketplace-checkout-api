@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { MarketConfig } from "./market-config";
+import { MarketConfig } from './market-config';
 
 export default {
   postgresUrl: process.env.POSTGRES_URL || 'postgres://marketplace:12345@marketplace-postgres:5432/marketplace_db',
@@ -67,4 +67,10 @@ export default {
     commission: parseInt(process.env.AUCTION_COMMISSION || '10', 10),
   },
   ipfs: process.env.IPFS || 'https://ipfs.unique.network/ipfs',
+  payment: {
+    currentCurrency: process.env.CURRENT_CURRENCY || 'USD',
+    checkout: {
+      secretKey: process.env.CHECKOUT_SECRET_KEY || '',
+    },
+  },
 } as MarketConfig;

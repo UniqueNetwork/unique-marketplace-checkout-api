@@ -1,6 +1,6 @@
 {
   "name": "unique-marketplace-api",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "Backend project for unique marketplace",
   "author": "Unique Network",
   "private": true,
@@ -52,6 +52,7 @@
     "@socket.io/postgres-emitter": "^0.1.0",
     "@types/cli-color": "^2.0.2",
     "@unique-nft/types": "0.4.0",
+    "checkout-sdk-node": "^2.0.1",
     "class-transformer": "0.5.1",
     "class-validator": "0.13.2",
     "cli-color": "^2.0.1",

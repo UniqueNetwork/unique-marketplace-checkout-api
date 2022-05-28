@@ -17,15 +17,17 @@ import { OffersController, OffersService } from './offers';
 import { TradesController, TradesService } from './trades';
 import { HealthController, HealthService } from './utils/health';
 import { MetricsController, MetricsService } from './utils/metrics';
-import { AuctionModule } from "./auction/auction.module";
-import { BroadcastModule } from "./broadcast/broadcast.module";
-import { RequestLoggerMiddleware } from "./utils/logging/request-logger-middleware.service";
+import { AuctionModule } from './auction/auction.module';
+import { BroadcastModule } from './broadcast/broadcast.module';
+import { RequestLoggerMiddleware } from './utils/logging/request-logger-middleware.service';
+
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'blockchain'),
-      serveRoot:"/blockchain"
+      serveRoot: '/blockchain',
     }),
     SentryLoggerService(),
     DatabaseModule,
@@ -36,6 +38,7 @@ import { RequestLoggerMiddleware } from "./utils/logging/request-logger-middlewa
     TerminusModule,
     AuctionModule,
     BroadcastModule,
+    PaymentModule,
   ],
   controllers: [OffersController, TradesController, SettingsController, HealthController, MetricsController],
   providers: [OffersService, TradesService, PlaygroundCommand, SettingsService, HealthService, MetricsService, PrometheusService],
