@@ -4,7 +4,7 @@ import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@ne
 import { Connection, Repository, SelectQueryBuilder } from 'typeorm';
 
 import { PaginationRequest } from '../utils/pagination/pagination-request';
-import { PaginationResult, PaginationResultDto } from '../utils/pagination/pagination-result';
+import { PaginationResultDto } from '../utils/pagination/pagination-result';
 import { OfferSortingRequest } from '../utils/sorting/sorting-request';
 import { nullOrWhitespace } from '../utils/string/null-or-white-space';
 
@@ -29,7 +29,6 @@ type OfferPaginationResult = {
 export class OffersService {
     private logger: Logger;
     private readonly contractAskRepository: Repository<ContractAsk>;
-    private readonly searchIndexRepository: Repository<SearchIndex>;
     private offersQuerySortHelper: OffersQuerySortHelper;
 
     constructor(
@@ -39,8 +38,6 @@ export class OffersService {
         this.logger = new Logger(OffersService.name);
         this.contractAskRepository =
             connection.manager.getRepository(ContractAsk);
-        this.searchIndexRepository =
-            connection.manager.getRepository(SearchIndex);
         this.offersQuerySortHelper = new OffersQuerySortHelper(connection);
     }
     /**
@@ -59,7 +56,7 @@ export class OffersService {
         let paginationResult;
 
         try {
-            offers = await this.contractAskRepository.createQueryBuilder(
+            offers = this.contractAskRepository.createQueryBuilder(
                 'offer',
             );
             this.addRelations(offers);
@@ -237,11 +234,12 @@ export class OffersService {
                     collection_id: item.offer_collection_id,
                     token_id: item.offer_token_id,
                     price: item.offer_price,
-                    currency: +item.offer_currency,
+                    currency: item.offer_currency,
                     address_from: item.offer_address_from,
                     created_at: item.block_created_at,
                     auction: null,
                     tokenDescription: {},
+                    isSellBlockchain: item.offer_is_sell_blockchain
                 };
 
                 if (item.auction_id) {
@@ -284,6 +282,7 @@ export class OffersService {
                 'offer_block_number_ask',
                 'offer_block_number_cancel',
                 'offer_block_number_buy',
+                'offer_is_sell_blockchain',
                 'auction_id',
                 'auction_created_at',
                 'auction_updated_at',

@@ -60,6 +60,14 @@ export class OfferContractAskDto {
   @Expose()
   creationDate: Date;
 
+  @ApiProperty({ description: 'Currency price' })
+  @Expose()
+  currency: string;
+
+  @ApiProperty({ description: 'Buying an offer for blockchain' })
+  @Expose()
+  isSellBlockchain: boolean;   
+
   @ApiProperty({ required: false })
   @Expose()
   @Type(() => AuctionDto)
@@ -78,7 +86,8 @@ export class OfferContractAskDto {
       price: contractAsk.price.toString(),
       quoteId: +contractAsk.currency,
       seller: contractAsk.address_from,
-      creationDate: contractAsk.created_at
+      creationDate: contractAsk.created_at,
+      isSellBlockchain: contractAsk.is_sell_blockchain,
     };
 
     if (contractAsk?.auction?.bids?.length) {
