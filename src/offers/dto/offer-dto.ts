@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ContractAsk } from '../../entity';
 import { Auction, AuctionStatus, Bid, BidStatus, TokenDescription, TypeAttributToken } from '../../auction/types';
 import { Exclude, Expose, plainToInstance, Type } from 'class-transformer';
+import { isBoolean } from 'class-validator';
 
 class AuctionDto implements Auction {
   @Exclude() id: string;
@@ -60,6 +61,14 @@ export class OfferContractAskDto {
   @Expose()
   creationDate: Date;
 
+  @ApiProperty({ description: 'Currency price' })
+  @Expose()
+  currency: string;
+
+  @ApiProperty({ description: 'Buying an offer for blockchain' })
+  @Expose()
+  isSellBlockchain: boolean;   
+
   @ApiProperty({ required: false })
   @Expose()
   @Type(() => AuctionDto)
@@ -70,7 +79,7 @@ export class OfferContractAskDto {
   @Type(() => TokenDescriptionDto)
   tokenDescription: TokenDescriptionDto;
 
-  static fromContractAsk(contractAsk: ContractAsk): OfferContractAskDto {
+  static fromContractAsk(contractAsk: ContractAsk & { isSellBlockchain?: boolean }): OfferContractAskDto {
     const plain: Record<string, any> = {
       ...contractAsk,
       collectionId: +contractAsk.collection_id,
@@ -78,7 +87,10 @@ export class OfferContractAskDto {
       price: contractAsk.price.toString(),
       quoteId: +contractAsk.currency,
       seller: contractAsk.address_from,
-      creationDate: contractAsk.created_at
+      creationDate: contractAsk.created_at,
+      // TODO contractAsk different objects for the offer and the list of offers
+      // at runtime
+      isSellBlockchain: typeof contractAsk.is_sell_blockchain == "boolean" ?  contractAsk.is_sell_blockchain : contractAsk.isSellBlockchain,
     };
 
     if (contractAsk?.auction?.bids?.length) {

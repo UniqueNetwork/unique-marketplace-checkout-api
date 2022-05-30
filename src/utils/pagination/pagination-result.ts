@@ -8,14 +8,12 @@ export interface PaginationResult<T> {
 }
 
 export class PaginationResultDto<T> implements PaginationResult<T> {
-  // eslint-disable-next-line @typescript-eslint/ban-types
   constructor(type: Function, paginationResult: PaginationResult<T>) {
     this.type = type;
     Object.assign(this, paginationResult);
   }
 
   @Exclude()
-  // eslint-disable-next-line @typescript-eslint/ban-types
   type: Function;
 
   @Type(options => {

@@ -36,7 +36,7 @@ export class OffersController {
         description: fs.readFileSync('docs/offers.md').toString(),
     })
     @ApiResponse({ type: OfferContractAskDto, status: HttpStatus.OK })
-    get(
+    async get(
         @Query() pagination: PaginationRequest,
         @Query(ParseOffersFilterPipe) offersFilter: OffersFilter,
         @Query() sort: OfferSortingRequest,
