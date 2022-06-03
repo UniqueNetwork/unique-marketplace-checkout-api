@@ -17,16 +17,17 @@ import { OffersController, OffersService } from './offers';
 import { TradesController, TradesService } from './trades';
 import { HealthController, HealthService } from './utils/health';
 import { MetricsController, MetricsService } from './utils/metrics';
-import { AuctionModule } from "./auction/auction.module";
-import { BroadcastModule } from "./broadcast/broadcast.module";
-import { RequestLoggerMiddleware } from "./utils/logging/request-logger-middleware.service";
+import { AuctionModule } from './auction/auction.module';
+import { BroadcastModule } from './broadcast/broadcast.module';
+import { RequestLoggerMiddleware } from './utils/logging/request-logger-middleware.service';
 import { BulkService, BulkController } from './bulk';
+import { CheckoutService, CheckoutController } from './payment';
 
 @Module({
   imports: [
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'blockchain'),
-      serveRoot:"/blockchain"
+      serveRoot: '/blockchain',
     }),
     SentryLoggerService(),
     DatabaseModule,
@@ -38,8 +39,8 @@ import { BulkService, BulkController } from './bulk';
     AuctionModule,
     BroadcastModule,
   ],
-  controllers: [OffersController, TradesController, SettingsController, HealthController, MetricsController, BulkController],
-  providers: [OffersService, TradesService, PlaygroundCommand, SettingsService, HealthService, MetricsService, PrometheusService, BulkService],
+  controllers: [OffersController, TradesController, SettingsController, HealthController, MetricsController, BulkController, CheckoutController],
+  providers: [OffersService, TradesService, PlaygroundCommand, SettingsService, HealthService, MetricsService, PrometheusService, BulkService, CheckoutService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): any {

@@ -1,8 +1,8 @@
 import { IsNotEmpty, IsNumber, IsEnum, Min, IsArray, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { CurrencyPayName } from './types';
-import { enumToArray } from './utils';
+import { CurrencyPayName } from '../types';
+import { enumToArray } from '../utils';
 
 export class BulkSellNotBlockchainInputDto {
   @ApiProperty()
@@ -18,7 +18,7 @@ export class BulkSellNotBlockchainInputDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsNumber()
-  @Min(0.01)
+  @Min(1)
   price: number;
 
   @ApiProperty({ enum: enumToArray(CurrencyPayName), enumName: 'CurrencyPayName' })

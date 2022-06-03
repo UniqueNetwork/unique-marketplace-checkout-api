@@ -1,4 +1,5 @@
 import { SentryModuleOptions } from '../utils/sentry';
+import { CurrencyPayName } from '../types'
 
 interface EscrowConfig {
   wsEndpoint: string;
@@ -50,4 +51,10 @@ export interface MarketConfig {
     };
   };
   ipfs: string;
+  payment: {
+    currentCurrency: CurrencyPayName;
+    checkout: {
+      secretKey: string;
+    };
+  };
 }

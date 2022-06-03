@@ -42,6 +42,10 @@ export class TokenDescriptionDto {
 }
 
 export class OfferContractAskDto {
+  @ApiProperty({ description: 'Item ID' })
+  @Expose()
+  id: number;
+
   @ApiProperty({ description: 'Collection ID' })
   @Expose()
   collectionId: number;
