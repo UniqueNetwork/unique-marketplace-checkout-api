@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsEnum, Min } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsEnum, Min, IsArray, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 import { CurrencyPayName } from './types';
@@ -9,6 +9,11 @@ export class BulkSellNotBlockchainInputDto {
   @IsNotEmpty()
   @IsNumber()
   collectionId: number;
+
+  @ApiProperty({ required: false, isArray: true, type: Number })
+  @IsOptional()
+  @IsArray()
+  tokenIds?: number[];
 
   @ApiProperty()
   @IsNotEmpty()

@@ -39,8 +39,16 @@ export class BulkService {
     const rcp = this.uniqueApi.rpc as any;
     const accountTokens: string[] = (await rcp.unique.accountTokens(input.collectionId, util.normalizeAccountId(mainSeed.address))).toHuman();
 
+    console.log(input.tokenIds?.length, '---');
+
+    const tokenIdsAcount = input.tokenIds?.length
+      ? input.tokenIds.filter((tokenId) => accountTokens.includes(tokenId.toString())).map((token) => token.toString())
+      : accountTokens;
+
+    const tokenIds = tokenIdsAcount.length ? tokenIdsAcount : accountTokens;
+
     return accountTokens.length
-      ? this.bulkSellSetNotBlockchain(input.collectionId, accountTokens, convertPriceToMoney(input.price), input.currency)
+      ? this.bulkSellSetNotBlockchain(input.collectionId, tokenIds, convertPriceToMoney(input.price), input.currency)
       : { isOk: true };
   }
 
