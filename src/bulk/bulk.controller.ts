@@ -16,7 +16,7 @@ export class BulkController {
     summary: 'Put up for sale for money',
     description: fs.readFileSync('docs/bulk-sell-not-blockchain.md').toString(),
   })
-  @ApiResponse({ type: BulkSellNotBlockchainOutputDto, status: HttpStatus.OK })
+  @ApiResponse({ type: BulkSellNotBlockchainOutputDto, status: HttpStatus.CREATED })
   async bulkSellNotBlockchain(@Body() input: BulkSellNotBlockchainInputDto) {
     return this.bulkService.bulkSellNotBlockchain(input);
   }

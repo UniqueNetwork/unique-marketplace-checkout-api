@@ -12,3 +12,5 @@ export function enumToArray<T>(enumeration: T): NonFunctional<T[keyof T]>[] {
 }
 
 export const convertPriceToMoney = (price: number) => price * 1000000000000;
+
+export const convertMoneyToPrice = (money: number) => money / 1000000000000;

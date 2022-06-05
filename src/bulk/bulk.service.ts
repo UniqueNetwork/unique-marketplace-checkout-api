@@ -8,9 +8,9 @@ import { BulkSellNotBlockchainOutputDto } from './bulk.sell.not.blockchain.outpu
 import * as util from '../utils/blockchain/util';
 import { ContractAsk } from '../entity';
 import { ASK_STATUS } from '../escrow';
-import { CurrencyPayName } from './types';
+import { CurrencyPayName } from '../types';
 import { SearchIndexService } from '../auction/services/search-index.service';
-import { convertPriceToMoney } from './utils';
+import { convertPriceToMoney } from '../utils';
 
 @Injectable()
 export class BulkService {
