@@ -1,35 +1,33 @@
-version: "3.5"
-
+version: "3.8"
 
 services:
-  marketplace-db:
+  dev-db:
     image: postgres:14.1-alpine
-    container_name: marketplace-db
+    container_name: dev-db
     environment:
       POSTGRES_USER:  postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ogOYLBvRWtM87Jp4sncoFMNTEFjMZqVZ
       POSTGRES_DB:  postgres
-    restart: unless-stopped
+    restart: always
     ports:
       - 5432:5432
     volumes:
-      - marketplace-db:/var/lib/postgresql/data
+      - dev-db:/var/lib/postgresql/data
       - /etc/localtime:/etc/localtime:ro
-  marketplace-db-test:
+  dev-db-test:
     image: postgres:14.1-alpine
-    container_name: marketplace-db-test
+    container_name: dev-db-test
     environment:
       POSTGRES_USER:  postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: KzWRmJPiXhbxJe1kp6CXqrExPOYjjLFM
       POSTGRES_DB:  postgres
-    restart: unless-stopped
+    restart: always
     ports:
       - 6432:5432
     volumes:
-      - marketplace-db-test:/var/lib/postgresql/data
+      - dev-db-test:/var/lib/postgresql/data
       - /etc/localtime:/etc/localtime:ro
 
 volumes:
-  marketplace-db:
-  marketplace-db-test:
-
+  dev-db:
+  dev-db-test:

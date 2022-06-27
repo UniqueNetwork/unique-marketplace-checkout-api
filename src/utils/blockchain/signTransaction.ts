@@ -1,7 +1,6 @@
-import { KeyringPair } from '@polkadot/keyring/types';
 import { SubmittableExtrinsic } from '@polkadot/api-base/types';
 import type { ISubmittableResult } from '@polkadot/types/types';
-import { ApiPromise } from '@polkadot/api';
+import { AddressOrPair } from '@polkadot/api-base/types';
 
 import * as logging from '../logging';
 
@@ -27,18 +26,18 @@ const getTransactionStatus = ({ events, status }: ISubmittableResult) => {
       return TransactionStatus.SUCCESS;
     }
   }
+
   return TransactionStatus.FAIL;
 };
 
 export const signTransaction = (
-  sender: KeyringPair,
+  senderAccount: AddressOrPair,
   transaction: SubmittableExtrinsic<'promise', ISubmittableResult>,
   label = 'transaction',
-  api: ApiPromise,
-): Promise<{ result: ISubmittableResult; status: TransactionStatus; errorMessage: string | null }> =>
-  new Promise(async (resolve, reject) => {
+): Promise<{ result: ISubmittableResult; status: TransactionStatus }> => {
+  return new Promise(async (resolve, reject) => {
     try {
-      const unsub = await transaction.signAndSend(sender, (result) => {
+      const unsub = await transaction.signAndSend(senderAccount, (result) => {
         const status = getTransactionStatus(result);
 
         if (status === TransactionStatus.NOT_READY) {
@@ -47,27 +46,15 @@ export const signTransaction = (
 
         if (status === TransactionStatus.SUCCESS) {
           logging.log(`${label} successful`);
+          resolve({ result, status });
         }
 
         if (status === TransactionStatus.FAIL) {
           logging.log(`Something went wrong with ${label}. Status: ${status}`, logging.level.ERROR);
           logging.log(result.toHuman(), logging.level.ERROR);
+          reject({ result, status });
         }
 
-        let errorMessage: string | null = null;
-        if (result.dispatchError) {
-          if (result.dispatchError.isModule) {
-            // for module errors, we have the section indexed, lookup
-            const decoded = api.registry.findMetaError(result.dispatchError.asModule);
-            const { docs, name, section } = decoded;
-            errorMessage = `${section}.${name}: ${docs.join(' ')}`;
-          } else {
-            // Other, CannotLookup, BadOrigin, no extra info
-            errorMessage = result.dispatchError.toString();
-          }
-        }
-
-        resolve({ result, status, errorMessage });
         unsub();
       });
     } catch (e) {
@@ -75,3 +62,4 @@ export const signTransaction = (
       reject(e);
     }
   });
+};

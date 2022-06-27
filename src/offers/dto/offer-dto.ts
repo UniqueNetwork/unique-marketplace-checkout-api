@@ -1,8 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ContractAsk } from '../../entity';
-import { Auction, AuctionStatus, Bid, BidStatus, TokenDescription, TypeAttributToken } from '../../auction/types';
+import { Auction, AuctionStatus, Bid, BidStatus, TokenDescription } from '../../auction/types';
 import { Exclude, Expose, plainToInstance, Type } from 'class-transformer';
-import { isBoolean } from 'class-validator';
 
 class AuctionDto implements Auction {
   @Exclude() id: string;
@@ -38,7 +37,7 @@ export class TokenDescriptionDto {
   @Expose() prefix: string;
   @Expose() description: string;
   @Expose() collectionCover: string;
-  @Expose() attributes: Array<TokenDescription>
+  @Expose() attributes: Array<TokenDescription>;
 }
 
 export class OfferContractAskDto {
@@ -65,14 +64,6 @@ export class OfferContractAskDto {
   @Expose()
   creationDate: Date;
 
-  @ApiProperty({ description: 'Currency price' })
-  @Expose()
-  currency: string;
-
-  @ApiProperty({ description: 'Buying an offer for blockchain' })
-  @Expose()
-  isSellBlockchain: boolean;   
-
   @ApiProperty({ required: false })
   @Expose()
   @Type(() => AuctionDto)
@@ -94,7 +85,7 @@ export class OfferContractAskDto {
       creationDate: contractAsk.created_at,
       // TODO contractAsk different objects for the offer and the list of offers
       // at runtime
-      isSellBlockchain: typeof contractAsk.is_sell_blockchain == "boolean" ?  contractAsk.is_sell_blockchain : contractAsk.isSellBlockchain,
+      isSellBlockchain: typeof contractAsk.is_sell_blockchain == 'boolean' ? contractAsk.is_sell_blockchain : contractAsk.isSellBlockchain,
     };
 
     if (contractAsk?.auction?.bids?.length) {
@@ -110,7 +101,7 @@ export class OfferContractAskDto {
   prefix: string
 }
      */
-/*     if (Array.isArray(contractAsk?.search_index)) {
+    /*     if (Array.isArray(contractAsk?.search_index)) {
       plain.tokenDescription = contractAsk?.search_index.reduce((acc, item) => {
         if (item.type === TypeAttributToken.Prefix) {
           acc.prefix = item.items.pop();
@@ -150,6 +141,8 @@ export class OfferContractAskDto {
       })
     } */
 
-    return plainToInstance<OfferContractAskDto, Record<string, any>>(OfferContractAskDto, plain, { excludeExtraneousValues: true });
+    return plainToInstance<OfferContractAskDto, Record<string, any>>(OfferContractAskDto, plain, {
+      excludeExtraneousValues: true,
+    });
   }
 }

@@ -10,18 +10,18 @@ import { ConfigModule } from './config/module';
 import { PlaygroundCommand } from './utils/playground';
 import { SentryLoggerService } from './utils/sentry/sentry-logger.service';
 import { PrometheusService } from './utils/prometheus/prometheus.service';
-
 import { EscrowModule } from './escrow/module';
-import { SettingsController, SettingsService } from './settings';
-import { OffersController, OffersService } from './offers';
-import { TradesController, TradesService } from './trades';
 import { HealthController, HealthService } from './utils/health';
 import { MetricsController, MetricsService } from './utils/metrics';
 import { AuctionModule } from './auction/auction.module';
 import { BroadcastModule } from './broadcast/broadcast.module';
 import { RequestLoggerMiddleware } from './utils/logging/request-logger-middleware.service';
-import { BulkService, BulkController } from './bulk';
-import { CheckoutService, CheckoutController } from './payment';
+import { TradesModule } from './trades/trades.module';
+import { OffersModule } from './offers/offers.module';
+import { SettingsModule } from './settings/settings.module';
+import { AdminModule } from './admin/admin.module';
+import { CheckoutModule } from './payment/checkout/checkout.module';
+import { BulkModule } from './bulk/bulk.module';
 
 @Module({
   imports: [
@@ -38,9 +38,15 @@ import { CheckoutService, CheckoutController } from './payment';
     TerminusModule,
     AuctionModule,
     BroadcastModule,
+    TradesModule,
+    OffersModule,
+    SettingsModule,
+    AdminModule,
+    CheckoutModule,
+    BulkModule,
   ],
-  controllers: [OffersController, TradesController, SettingsController, HealthController, MetricsController, BulkController, CheckoutController],
-  providers: [OffersService, TradesService, PlaygroundCommand, SettingsService, HealthService, MetricsService, PrometheusService, BulkService, CheckoutService],
+  controllers: [HealthController, MetricsController],
+  providers: [PlaygroundCommand, HealthService, MetricsService, PrometheusService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): any {
