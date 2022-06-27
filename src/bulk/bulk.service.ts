@@ -1,4 +1,4 @@
-import { Injectable, Inject, BadRequestException, HttpStatus } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, HttpStatus, forwardRef } from '@nestjs/common';
 import { ApiPromise } from '@polkadot/api';
 import { Connection, Repository, In } from 'typeorm';
 
@@ -7,10 +7,11 @@ import { BulkSellNotBlockchainInputDto } from './dto/bulk.sell.not.blockchain.in
 import { IsOkOutputDto } from './dto/is.ok.output.dto';
 import * as util from '../utils/blockchain/util';
 import { ContractAsk } from '../entity';
-import { ASK_STATUS } from '../escrow';
+import { ASK_STATUS } from '../escrow/constants';
 import { CurrencyPayName } from '../types';
 import { SearchIndexService } from '../auction/services/search-index.service';
 import { convertPriceToMoney } from '../utils';
+import { UNIQUE_API_PROVIDER } from '../blockchain';
 
 @Injectable()
 export class BulkService {
@@ -18,7 +19,7 @@ export class BulkService {
 
   constructor(
     @Inject('CONFIG') private config: MarketConfig,
-    @Inject('UNIQUE_API') private uniqueApi: ApiPromise,
+    @Inject(forwardRef(() => UNIQUE_API_PROVIDER)) private uniqueApi: ApiPromise,
     @Inject('DATABASE_CONNECTION') private connection: Connection,
     private readonly searchIndex: SearchIndexService,
   ) {

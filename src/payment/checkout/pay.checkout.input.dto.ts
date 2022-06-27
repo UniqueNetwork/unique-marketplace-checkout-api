@@ -10,7 +10,7 @@ export class PayCheckoutInputDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  transferAddress: string;  
+  transferAddress: string;
 
   @ApiProperty()
   @IsNotEmpty()
@@ -20,5 +20,5 @@ export class PayCheckoutInputDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsNumber()
-  collectionId: number;  
+  collectionId: number;
 }

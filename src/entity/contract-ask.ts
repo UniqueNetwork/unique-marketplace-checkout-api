@@ -7,7 +7,7 @@ import { SearchIndex } from './search-index';
 @Index('IX_contract_ask_status', ['status'])
 @Entity('contract_ask', { schema: 'public' })
 export class ContractAsk {
-  @Column('uuid', { primary: true, name: 'id', default: () => 'uuid_generate_v4()' })
+  @Column('uuid', { primary: true, name: 'id' })
   id: string;
 
   @Column('varchar', { name: 'status', length: 16 })
@@ -32,10 +32,10 @@ export class ContractAsk {
   address_from: string;
 
   @Column('varchar', { name: 'address_to', length: 128 })
-  address_to: string | null;
+  address_to: string;
 
   @Column('bigint', { name: 'block_number_ask' })
-  block_number_ask: string | null;
+  block_number_ask: string;
 
   @Column('bigint', { name: 'block_number_cancel', nullable: true })
   block_number_cancel: string;
@@ -46,19 +46,24 @@ export class ContractAsk {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', name: 'created_at_ask' })
   created_at_ask: Date;
 
-  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP', name: 'updated_at' })
+  @Column({
+    type: 'timestamp',
+    default: () => 'CURRENT_TIMESTAMP',
+    onUpdate: 'CURRENT_TIMESTAMP',
+    name: 'updated_at',
+  })
   updated_at: Date;
-
-  @OneToOne((type) => BlockchainBlock, (BlockchainBlock) => BlockchainBlock.network)
-  created_at: Date;
 
   @Column({ type: Boolean, nullable: true })
   is_sell_blockchain: boolean | null;
 
+  @OneToOne(() => BlockchainBlock, (BlockchainBlock) => BlockchainBlock.network)
+  created_at: Date;
+
   @OneToOne(() => AuctionEntity, (auction) => auction.contractAsk, { cascade: ['insert'] })
   auction?: AuctionEntity;
-  @OneToOne((type) => BlockchainBlock)
+  @OneToOne(() => BlockchainBlock)
   block: BlockchainBlock;
-  @OneToOne((type) => SearchIndex)
+  @OneToOne(() => SearchIndex)
   search_index: SearchIndex;
 }

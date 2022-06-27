@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger, BadRequestException, HttpStatus } from '@nestjs/common';
+import { Injectable, Inject, Logger, BadRequestException, HttpStatus, forwardRef } from '@nestjs/common';
 import { Checkout } from 'checkout-sdk-node';
 import { ApiPromise } from '@polkadot/api';
 import { Connection, Repository } from 'typeorm';
@@ -8,10 +8,11 @@ import { PayCheckoutInputDto } from './pay.checkout.input.dto';
 import { OffersService } from '../../offers';
 import { convertMoneyToPrice } from '../../utils';
 import { ContractAsk } from '../../entity';
-import { ASK_STATUS } from '../../escrow/index';
+import { ASK_STATUS } from '../../escrow/constants';
 import { privateKey } from '../../utils/blockchain/util';
 import { convertAddress, normalizeAccountId } from '../../utils/blockchain/util';
 import { signTransaction, TransactionStatus } from '../../utils/blockchain/signTransaction';
+import { UNIQUE_API_PROVIDER } from '../../blockchain';
 
 type PaymentsResult = {
   id: string;
@@ -33,7 +34,7 @@ export class CheckoutService {
   constructor(
     @Inject('CONFIG') private config: MarketConfig,
     private offersService: OffersService,
-    @Inject('UNIQUE_API') private uniqueApi: ApiPromise,
+    @Inject(forwardRef(() => UNIQUE_API_PROVIDER)) private uniqueApi: ApiPromise,
     @Inject('DATABASE_CONNECTION') private connection: Connection,
   ) {
     this.logger = new Logger(CheckoutService.name);
@@ -104,7 +105,7 @@ export class CheckoutService {
 
     const transaction = this.uniqueApi.tx.unique.transfer(normalizeAccountId(address), input.collectionId, input.tokenId, 1);
 
-    const { status, errorMessage } = await signTransaction(addressMain, transaction, 'transaction', this.uniqueApi);
+    const { status } = await signTransaction(addressMain, transaction, 'transaction');
 
     if (status === TransactionStatus.FAIL) {
       await this.cko.payments
@@ -118,7 +119,7 @@ export class CheckoutService {
       throw new BadRequestException({
         statusCode: HttpStatus.I_AM_A_TEAPOT,
         message: 'Offer purchase error',
-        error: errorMessage,
+        error: 'Offer purchase error',
       });
     }
 

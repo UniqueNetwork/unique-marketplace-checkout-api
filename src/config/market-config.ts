@@ -1,5 +1,5 @@
 import { SentryModuleOptions } from '../utils/sentry';
-import { CurrencyPayName } from '../types'
+import { CurrencyPayName } from '../types';
 
 interface EscrowConfig {
   wsEndpoint: string;
@@ -26,8 +26,14 @@ export interface MarketConfig {
   rootDir: string;
   autoDBMigrations: boolean;
   auction: AuctionConfig;
+  marketType: string;
+  mainSaleSeed: string;
+  adminList: string;
+  jwt: {
+    access: string;
+    refresh: string;
+  };
   sentry: SentryModuleOptions;
-  mainSaleSeed: string | null;
   dev: {
     debugMigrations: boolean;
     debugScanBlock: boolean;

@@ -9,10 +9,16 @@ export default {
   disableSecurity: process.env.DISABLE_SECURITY === 'true',
   rootDir: path.normalize(path.join(__dirname, '..')),
   autoDBMigrations: process.env.AUTO_DB_MIGRATIONS === 'true',
+  marketType: process.env.MARKET_TYPE || 'secondary', // primary or secondary
   mainSaleSeed: process.env.MAINSALE_SEED || null,
+  adminList: process.env.ADMIN_LIST || '',
   dev: {
     debugMigrations: false,
     debugScanBlock: false,
+  },
+  jwt: {
+    access: '24h',
+    refresh: '7d',
   },
   sentry: {
     enabled: process.env.SENTRY_ENABLED === 'true',
@@ -29,7 +35,7 @@ export default {
   blockchain: {
     escrowSeed: process.env.ESCROW_SEED || null, // For kusama and contract creation
     unique: {
-      wsEndpoint: process.env.UNIQUE_WS_ENDPOINT || 'wss://opal.unique.network',
+      wsEndpoint: process.env.UNIQUE_WS_ENDPOINT || 'wss://quartz.unique.network',
       network: process.env.UNIQUE_NETWORK || 'quartz',
       startFromBlock: `${process.env.UNIQUE_START_FROM_BLOCK || 'current'}`,
       contractOwnerSeed: process.env.CONTRACT_ETH_OWNER_SEED || null,

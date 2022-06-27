@@ -8,7 +8,6 @@ import { BlockchainBlock, ContractAsk } from '../../entity';
 import { v4 as uuid } from 'uuid';
 import { ASK_STATUS } from '../../escrow/constants';
 import { OfferContractAskDto } from '../../offers/dto/offer-dto';
-import { ApiPromise} from '@polkadot/api';
 import { DateHelper } from '../../utils/date-helper';
 import { ExtrinsicSubmitter } from './helpers/extrinsic-submitter';
 import { MarketConfig } from '../../config/market-config';
@@ -16,6 +15,8 @@ import { SearchIndexService } from './search-index.service';
 import { AuctionCredentials } from '../providers';
 import { InjectSentry, SentryService } from '../../utils/sentry';
 import { subToEth } from '../../utils/blockchain/web3';
+import { CreateAskAndBroadcastArgs } from '../types/auction';
+import { InjectUniqueAPI } from '../../blockchain';
 
 export type CreateAuctionArgs = {
   collectionId: string;
@@ -33,7 +34,7 @@ type FailedAuctionArgs = {
   priceStep: bigint;
   days: number;
   minutes: number;
-}
+};
 
 @Injectable()
 export class AuctionCreationService {
@@ -46,7 +47,7 @@ export class AuctionCreationService {
   constructor(
     @Inject('DATABASE_CONNECTION') private connection: Connection,
     private broadcastService: BroadcastService,
-    @Inject('UNIQUE_API') private uniqueApi: any,
+    @InjectUniqueAPI() private uniqueApi: any,
     private readonly extrinsicSubmitter: ExtrinsicSubmitter,
     @Inject('CONFIG') private config: MarketConfig,
     private searchIndexService: SearchIndexService,
@@ -59,7 +60,6 @@ export class AuctionCreationService {
   }
 
   async checkOwner(collectionId: number, tokenId: number): Promise<boolean> {
-
     const token = (await this.uniqueApi.query.nonfungible.tokenData(collectionId, tokenId)).toJSON();
     const owner = token['owner'];
 
@@ -87,7 +87,7 @@ export class AuctionCreationService {
     if (minutes) stopAt = DateHelper.addMinutes(minutes, stopAt);
 
     const block = await this.sendTransferExtrinsic(tx);
-    await this.blockchainBlockRepository.save(block);
+    await this.connection.createQueryBuilder().insert().into(BlockchainBlock).values(block).orIgnore().execute();
 
     this.logger.debug(`Token transfer block number: ${block.block_number}`);
 
@@ -100,14 +100,30 @@ export class AuctionCreationService {
       });
     }
 
+    const offer = await this.createAskAndBroadcast({
+      blockNumber: block.block_number,
+      collectionId,
+      tokenId,
+      ownerAddress,
+      priceStep,
+      startPrice,
+      stopAt,
+    });
+
+    return offer;
+  }
+
+  async createAskAndBroadcast(data: CreateAskAndBroadcastArgs): Promise<OfferContractAskDto> {
+    const { blockNumber, collectionId, tokenId, ownerAddress, startPrice, priceStep, stopAt } = data;
+
     const contractAsk = await this.contractAskRepository.create({
       id: uuid(),
-      block_number_ask: block.block_number,
+      block_number_ask: blockNumber,
       network: this.config.blockchain.unique.network,
       collection_id: collectionId,
       token_id: tokenId,
       address_from: encodeAddress(ownerAddress),
-      address_to: '',
+      address_to: encodeAddress(this.auctionCredentials.uniqueAddress),
       status: ASK_STATUS.ACTIVE, // todo - add appropriate status
       price: startPrice.toString(),
       currency: '',
@@ -129,26 +145,25 @@ export class AuctionCreationService {
     this.broadcastService.sendAuctionStarted(offer);
 
     const auctionCreatedData = {
-      subject:'Create offer for auction',
-      thread:'auction',
+      subject: 'Create offer for auction',
+      thread: 'auction',
       collection: collectionId,
       token: tokenId,
       price: startPrice.toString(),
-      block: block.block_number,
+      block: blockNumber,
       auction: {
-        stopAt:`${stopAt}`,
+        stopAt: `${stopAt}`,
         startPrice: startPrice.toString(),
         priceStep: priceStep.toString(),
-        status: 'ACTIVE'
+        status: 'ACTIVE',
       },
       address_from: ownerAddress,
-      address_from_n42: encodeAddress(ownerAddress)
-    }
+      address_from_n42: encodeAddress(ownerAddress),
+    };
     this.logger.debug(JSON.stringify(auctionCreatedData));
 
     return offer;
   }
-
 
   async saveFailedAuction(args: FailedAuctionArgs): Promise<void> {
     await this.auctionRepository.save({
@@ -159,7 +174,7 @@ export class AuctionCreationService {
       startPrice: args.startPrice.toString(),
       status: AuctionStatus.failed,
       stopAt: new Date(),
-      bids: []
+      bids: [],
     });
   }
 
@@ -175,7 +190,11 @@ export class AuctionCreationService {
           message: 'Block number is not defined',
         });
       }
-      this.logger.debug(`{subject:'Send Transfer Extrinsic', thread:'transfer extrinsic', network: '${this.config.blockchain.unique.network}', block_number: '${blockNumber.toString()}' }`)
+      this.logger.debug(
+        `{subject:'Send Transfer Extrinsic', thread:'transfer extrinsic', network: '${
+          this.config.blockchain.unique.network
+        }', block_number: '${blockNumber.toString()}' }`,
+      );
       return this.blockchainBlockRepository.create({
         network: this.config.blockchain.unique.network,
         block_number: blockNumber.toString(),
