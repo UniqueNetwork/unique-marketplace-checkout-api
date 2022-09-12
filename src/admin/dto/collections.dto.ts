@@ -4,7 +4,6 @@ import { Collection } from '../../entity/collection';
 import { IsInt, IsOptional, IsPositive, Max, Min } from 'class-validator';
 import { BIGINT_MAX_VALUE, U32_MAX_VALUE } from '../constants';
 import { Transform, Type } from 'class-transformer';
-import { UNIQUE } from '../../utils/blockchain/web3';
 import { IsBigInt, BigIntGte, BigIntLte } from '../../offers/decorators';
 
 const ToBigInt = () =>
@@ -54,7 +53,7 @@ export class DisableCollectionResult {
   data: Collection;
 }
 
-export class MassFixPriceSaleResult {
+export class MassFixPriceSaleResultDto {
   @ApiProperty({ default: HttpStatus.OK })
   statusCode = HttpStatus.OK;
   @ApiProperty()
@@ -69,14 +68,16 @@ export class MassFixPriceSaleDTO {
   @IsPositive()
   @IsInt()
   collectionId: number;
-  @ApiProperty({ example: UNIQUE.toString(), description: `Max value is ${BIGINT_MAX_VALUE}` })
+
+  @ApiProperty({ example: 1_000_000_000_000, description: `Max value is ${BIGINT_MAX_VALUE}`, type: 'string' })
+  @Type(() => BigInt)
   @BigIntLte(BIGINT_MAX_VALUE)
   @IsBigInt()
   @ToBigInt()
-  price: bigint;
+  price: string;
 }
 
-export class MassAuctionSaleResult {
+export class MassAuctionSaleResultDto {
   @ApiProperty({ default: HttpStatus.OK })
   statusCode = HttpStatus.OK;
   @ApiProperty()
@@ -117,7 +118,7 @@ export class MassAuctionSaleDTO {
   @Type(() => Number)
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(0)
   @Max(59)
   minutes: number;
 }

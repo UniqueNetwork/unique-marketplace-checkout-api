@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { MarketConfig } from '../../config/market-config';
+import { MarketConfig } from '@app/config';
 import { Keyring } from '@polkadot/api';
 import { UNAUTHORIZED_ADMIN_ERROR_MESSAGE } from '../constants';
 

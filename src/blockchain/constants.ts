@@ -1,2 +1,0 @@
-export const UNIQUE_API_PROVIDER = 'UNIQUE_API';
-export const KUSAMA_API_PROVIDER = 'KUSAMA_API';

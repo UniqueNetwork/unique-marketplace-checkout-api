@@ -1,7 +1,8 @@
 import { Column, Entity, Index, OneToOne } from 'typeorm';
 import { BlockchainBlock } from './blockchain-block';
-import { AuctionEntity } from '../auction/entities';
+
 import { SearchIndex } from './search-index';
+import { AuctionEntity } from './auction-entity';
 
 @Index('IX_contract_ask_collection_id_token_id', ['collection_id', 'token_id'])
 @Index('IX_contract_ask_status', ['status'])
@@ -53,9 +54,6 @@ export class ContractAsk {
     name: 'updated_at',
   })
   updated_at: Date;
-
-  @Column({ type: Boolean, nullable: true })
-  is_sell_blockchain: boolean | null;
 
   @OneToOne(() => BlockchainBlock, (BlockchainBlock) => BlockchainBlock.network)
   created_at: Date;

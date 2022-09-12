@@ -5,6 +5,7 @@ import { waitReady } from '@polkadot/wasm-crypto';
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 
+// TODO: replace to SdkExtrinsicService
 import { ExtrinsicSubmitter } from '../../src/auction/services/helpers/extrinsic-submitter';
 import * as util from '../../src/utils/blockchain/util';
 import { convertAddress } from '../../src/utils/blockchain/util';
@@ -162,7 +163,13 @@ export const createAuction = async (
     } as CreateAuctionRequest);
 };
 
-export const placeBid = async (testEntities: AuctionTestEntities, collectionId, tokenId, amount = '100', signer?: KeyringPair): Promise<request.Test> => {
+export const placeBid = async (
+  testEntities: AuctionTestEntities,
+  collectionId,
+  tokenId,
+  amount = '100',
+  signer?: KeyringPair,
+): Promise<request.Test> => {
   const {
     app,
     kusamaApi,
@@ -195,7 +202,12 @@ export const withdrawBid = async (
   return request(testEntities.app.getHttpServer()).delete(`/auction/withdraw_bid?${query}`).set({ Authorization: authorization }).send();
 };
 
-export const calculate = async (testEntities: AuctionTestEntities, collectionId: string, tokenId: string, bidderAddress?: string): Promise<request.Test> => {
+export const calculate = async (
+  testEntities: AuctionTestEntities,
+  collectionId: string,
+  tokenId: string,
+  bidderAddress?: string,
+): Promise<request.Test> => {
   return request(testEntities.app.getHttpServer()).post(`/auction/calculate`).send({
     collectionId,
     tokenId,

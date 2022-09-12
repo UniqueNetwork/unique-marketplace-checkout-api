@@ -1,82 +1,127 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
-import { Connection, EntityManager, Repository } from 'typeorm';
-import { ApiPromise } from '@polkadot/api';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { stringify } from '@polkadot/util';
 import { v4 as uuid } from 'uuid';
-
-import { AuctionEntity, BidEntity } from '../entities';
-import { BroadcastService } from '../../broadcast/services/broadcast.service';
-import { OfferContractAskDto } from '../../offers/dto/offer-dto';
-import { BlockchainBlock, ContractAsk } from '../../entity';
-import { MarketConfig } from '../../config/market-config';
-import { ExtrinsicSubmitter } from './helpers/extrinsic-submitter';
-import { BidStatus, CalculateArgs, CalculationInfo, PlaceBidArgs } from '../types';
-import { DatabaseHelper } from './helpers/database-helper';
 import { encodeAddress } from '@polkadot/util-crypto';
-import { InjectKusamaAPI } from '../../blockchain';
+
+import { BroadcastService } from '@app/broadcast/services/broadcast.service';
+import { MONEY_TRANSFER_STATUS, MONEY_TRANSFER_TYPES } from '@app/escrow/constants';
+import { AuctionBidEntity, MoneyTransfer, OffersEntity } from '@app/entity';
+
+import { OfferEntityDto } from '@app/offers/dto/offer-dto';
+import { AuctionStatus, BidStatus, CalculateArgs, CalculationInfo, PlaceBidArgs } from '@app/types';
+import { DatabaseHelper } from './helpers/database-helper';
+import { PlaceBidRequestDto } from '../requests/place-bid';
+import { InjectKusamaSDK } from '@app/uniquesdk';
+import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 @Injectable()
 export class BidPlacingService {
   private readonly logger = new Logger(BidPlacingService.name);
 
-  private bidRepository: Repository<BidEntity>;
-  private readonly auctionRepository: Repository<AuctionEntity>;
-  private blockchainBlockRepository: Repository<BlockchainBlock>;
-  private readonly contractAskRepository: Repository<ContractAsk>;
+  private bidRepository: Repository<AuctionBidEntity>;
+  private offersRepository: Repository<OffersEntity>;
+  private moneyTransferRepository: Repository<MoneyTransfer>;
 
   constructor(
-    @Inject('DATABASE_CONNECTION') private connection: Connection,
+    private connection: DataSource,
+    @InjectKusamaSDK() private readonly kusamaProvider: SdkProvider,
     private broadcastService: BroadcastService,
-    @InjectKusamaAPI() private kusamaApi: ApiPromise,
-    @Inject('CONFIG') private config: MarketConfig,
-    private readonly extrinsicSubmitter: ExtrinsicSubmitter,
   ) {
-    this.bidRepository = connection.manager.getRepository(BidEntity);
-    this.contractAskRepository = connection.getRepository(ContractAsk);
-    this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
-    this.auctionRepository = connection.manager.getRepository(AuctionEntity);
+    this.offersRepository = connection.manager.getRepository(OffersEntity);
+    this.bidRepository = connection.manager.getRepository(AuctionBidEntity);
+    this.moneyTransferRepository = connection.getRepository(MoneyTransfer);
   }
 
-  async placeBid(placeBidArgs: PlaceBidArgs): Promise<OfferContractAskDto> {
-    const { tx } = placeBidArgs;
+  /**
+   * @async
+   * Places bid for auction
+   * @description Data is build via SDK, signature is created and signerPayloadJSON
+   * @param placeBidArgs
+   * @returns {Promise<OfferEntityDto>}
+   */
+  async placeBid(placeBidArgs: PlaceBidRequestDto): Promise<OfferEntityDto> {
+    let offers: OffersEntity;
+    let nextUserBid: AuctionBidEntity;
+    // Validate auction
+    await this.checkActiveAuction(placeBidArgs?.tokenId.toString(), placeBidArgs?.collectionId.toString());
+    const {
+      blockNumber,
+      isCompleted,
+      isError,
+      transferData: { sender, amount },
+    } = await this.kusamaProvider.transferService.transferBalance(placeBidArgs.signerPayloadJSON, placeBidArgs.signature);
 
-    let contractAsk: ContractAsk;
-    let nextUserBid: BidEntity;
+    const bidArgs = {
+      collectionId: placeBidArgs.collectionId,
+      tokenId: placeBidArgs.tokenId,
+      bidderAddress: sender,
+      amount: amount.toString(),
+      signature: placeBidArgs.signature,
+    };
+
+    const info = await this.getCalculationInfo(bidArgs);
+
+    if (BigInt(amount) < info[0].minBidderAmount) {
+      throw new BadRequestException(`Minimum bet ${info[0].minBidderAmount}`);
+    }
 
     try {
-      [contractAsk, nextUserBid] = await this.tryPlacePendingBid(placeBidArgs);
-
-      const offer = OfferContractAskDto.fromContractAsk(contractAsk);
-
-      this.broadcastService.sendBidPlaced(offer);
-      this.logger.debug(``);
-      return offer;
+      [offers, nextUserBid] = await this.tryPlacePendingBid(bidArgs);
+      return OfferEntityDto.fromOffersEntity(offers);
     } catch (error) {
       this.logger.warn(error);
-
       throw new BadRequestException(error.message);
     } finally {
-      if (contractAsk && nextUserBid) {
-        await this.extrinsicSubmitter
-          .submit(this.kusamaApi, tx)
-          .then(({ blockNumber }) => this.handleBidTxSuccess(placeBidArgs, contractAsk, nextUserBid, blockNumber))
-          .catch(() => this.handleBidTxFail(placeBidArgs, contractAsk, nextUserBid));
+      if (offers && nextUserBid) {
+        if (isCompleted && !isError) {
+          this.broadcastService.sendBidPlaced(OfferEntityDto.fromOffersEntity(offers));
+          await this.handleBidTxSuccess(bidArgs, offers, nextUserBid, blockNumber);
+        } else {
+          this.broadcastService.sendAuctionError(OfferEntityDto.fromOffersEntity(offers), 'Bid is not finished');
+          await this.handleBidTxFail(bidArgs, offers, nextUserBid);
+        }
       }
     }
   }
 
-  private async handleBidTxSuccess(placeBidArgs: PlaceBidArgs, oldContractAsk: ContractAsk, userBid: BidEntity, blockNumber: bigint): Promise<void> {
+  /**
+   * @async
+   * @param placeBidArgs
+   * @param oldOffer
+   * @param userBid
+   * @param blockNumber
+   * @private
+   */
+  private async handleBidTxSuccess(
+    placeBidArgs: PlaceBidArgs,
+    oldOffer: OffersEntity,
+    userBid: AuctionBidEntity,
+    blockNumber: bigint,
+  ): Promise<void> {
     try {
       await this.bidRepository.update(userBid.id, {
         status: BidStatus.finished,
         blockNumber: blockNumber.toString(),
+      });
+      await this.moneyTransferRepository.save({
+        id: uuid(),
+        amount: placeBidArgs.amount,
+        block_number: blockNumber.toString(),
+        network: 'kusama',
+        type: MONEY_TRANSFER_TYPES.DEPOSIT,
+        status: MONEY_TRANSFER_STATUS.COMPLETED,
+        created_at: new Date(),
+        updated_at: new Date(),
+        extra: { address: placeBidArgs.bidderAddress },
+        currency: '2', // TODO: check this
       });
     } catch (error) {
       const fullError = {
         method: 'handleBidTxSuccess',
         message: error.message,
         placeBidArgs,
-        oldContractAsk,
+        oldOffer,
         userBid,
       };
 
@@ -84,26 +129,30 @@ export class BidPlacingService {
     }
   }
 
-  private async handleBidTxFail(placeBidArgs: PlaceBidArgs, oldContractAsk: ContractAsk, userBid: BidEntity): Promise<void> {
-    const {
-      auction: { id: auctionId },
-    } = oldContractAsk;
-
+  /**
+   * @async
+   * @param placeBidArgs
+   * @param oldOffer
+   * @param userBid
+   * @private
+   */
+  private async handleBidTxFail(placeBidArgs: PlaceBidArgs, oldOffer: OffersEntity, userBid: AuctionBidEntity): Promise<void> {
+    const auctionId = oldOffer.id;
     try {
       await this.connection.transaction<void>('REPEATABLE READ', async (transactionEntityManager) => {
         const databaseHelper = new DatabaseHelper(transactionEntityManager);
-        await transactionEntityManager.update(BidEntity, userBid.id, { status: BidStatus.error });
+        await transactionEntityManager.update(AuctionBidEntity, userBid.id, { status: BidStatus.error });
 
         const newWinner = await databaseHelper.getAuctionPendingWinner({ auctionId });
-        const newOfferPrice = newWinner ? newWinner.totalAmount.toString() : oldContractAsk.auction.startPrice;
-        await transactionEntityManager.update(ContractAsk, oldContractAsk.id, { price: newOfferPrice });
+        const newOfferPrice = newWinner ? newWinner.totalAmount.toString() : oldOffer.startPrice;
+        await transactionEntityManager.update(OffersEntity, oldOffer.id, { price: newOfferPrice });
       });
     } catch (error) {
       const fullError = {
         method: 'handleBidTxFail',
         message: error.message,
         placeBidArgs,
-        oldContractAsk,
+        oldOffer,
         userBid,
       };
 
@@ -111,22 +160,25 @@ export class BidPlacingService {
     }
   }
 
-  getCalculationInfo(calculateArgs: CalculateArgs, entityManager?: EntityManager): Promise<[CalculationInfo, ContractAsk]> {
+  /**
+   * @async
+   * @param calculateArgs
+   * @param entityManager
+   */
+  getCalculationInfo(calculateArgs: CalculateArgs, entityManager?: EntityManager): Promise<[CalculationInfo, OffersEntity]> {
     const { collectionId, tokenId, bidderAddress } = calculateArgs;
 
-    const calculate = async (entityManager: EntityManager): Promise<[CalculationInfo, ContractAsk]> => {
+    const calculate = async (entityManager: EntityManager): Promise<[CalculationInfo, OffersEntity]> => {
       const databaseHelper = new DatabaseHelper(entityManager);
-      const contractAsk = await databaseHelper.getActiveAuctionContract({ collectionId, tokenId });
+      const auction = await databaseHelper.getActiveAuction({ collectionId, tokenId });
 
-      const {
-        auction: { id: auctionId },
-      } = contractAsk;
-      const price = BigInt(contractAsk.price);
-      const startPrice = BigInt(contractAsk.auction.startPrice);
-      const priceStep = BigInt(contractAsk.auction.priceStep);
+      const auctionId = auction.id;
+      const price = BigInt(auction.price);
+      const startPrice = BigInt(auction.startPrice);
+      const priceStep = BigInt(auction.priceStep);
 
       const bidderPendingAmount = await databaseHelper.getUserPendingSum({
-        auctionId: contractAsk.auction.id,
+        auctionId: auction.id,
         bidderAddress,
       });
 
@@ -147,20 +199,25 @@ export class BidPlacingService {
           bidderPendingAmount,
           minBidderAmount,
         },
-        contractAsk,
+        auction,
       ];
     };
 
     return entityManager ? calculate(entityManager) : this.connection.transaction('REPEATABLE READ', calculate);
   }
 
-  private async tryPlacePendingBid(placeBidArgs: PlaceBidArgs): Promise<[ContractAsk, BidEntity]> {
+  /**
+   * @async
+   * @param placeBidArgs
+   * @private
+   */
+  private async tryPlacePendingBid(placeBidArgs: PlaceBidArgs): Promise<[OffersEntity, AuctionBidEntity]> {
     const { bidderAddress } = placeBidArgs;
 
-    const placeWithTransaction = async (transactionEntityManager: EntityManager): Promise<[ContractAsk, BidEntity]> => {
+    const placeWithTransaction = async (transactionEntityManager: EntityManager): Promise<[OffersEntity, AuctionBidEntity]> => {
       const databaseHelper = new DatabaseHelper(transactionEntityManager);
 
-      const [calculationInfo, contractAsk] = await this.getCalculationInfo(placeBidArgs, transactionEntityManager);
+      const [calculationInfo, offers] = await this.getCalculationInfo(placeBidArgs, transactionEntityManager);
       const { minBidderAmount, bidderPendingAmount, priceStep, contractPendingPrice } = calculationInfo;
       const amount = BigInt(placeBidArgs.amount);
 
@@ -180,29 +237,64 @@ export class BidPlacingService {
 
       const userNextPendingAmount = bidderPendingAmount + amount;
 
-      const nextUserBid = transactionEntityManager.create(BidEntity, {
+      const nextUserBid = transactionEntityManager.create(AuctionBidEntity, {
         id: uuid(),
         status: BidStatus.minting,
         bidderAddress: encodeAddress(bidderAddress),
         amount: amount.toString(),
         balance: userNextPendingAmount.toString(),
-        auctionId: contractAsk.auction.id,
+        auctionId: offers.id,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      contractAsk.price = userNextPendingAmount.toString();
-      await transactionEntityManager.update(ContractAsk, contractAsk.id, {
+      offers.price = userNextPendingAmount.toString();
+      await transactionEntityManager.update(OffersEntity, offers.id, {
         price: userNextPendingAmount.toString(),
       });
 
-      await transactionEntityManager.save(BidEntity, nextUserBid);
+      await transactionEntityManager.save(AuctionBidEntity, nextUserBid);
 
-      contractAsk.auction.bids = await databaseHelper.getBids({ auctionId: contractAsk.auction.id });
+      offers.bids = await databaseHelper.getBids({ auctionId: offers.id });
 
-      return [contractAsk, nextUserBid];
+      return [offers, nextUserBid];
     };
 
-    return this.connection.transaction<[ContractAsk, BidEntity]>('REPEATABLE READ', placeWithTransaction);
+    return this.connection.transaction<[OffersEntity, AuctionBidEntity]>('REPEATABLE READ', placeWithTransaction);
+  }
+
+  /**
+   * @async
+   * @param collectionId
+   * @param tokenId
+   * @param bidderAddress
+   * @private
+   */
+  private async getBidsBalance(collectionId: number, tokenId: number, bidderAddress: string) {
+    const bids = await this.bidRepository
+      .createQueryBuilder('bids')
+      .leftJoinAndSelect('offers', 'offer', 'offer.id = bids.auctionId')
+      .where('bids.bidderAddress = :bidderAddress', { bidderAddress: encodeAddress(bidderAddress) })
+      .andWhere('offer.status_auction = :auctionsStatus', { auctionsStatus: AuctionStatus.active })
+      .andWhere('offer.collection_id = :collectionId', { collectionId })
+      .andWhere('offer.token_id = :tokenId', { tokenId })
+      .getMany();
+
+    return bids.reduce((acc, bid) => acc + BigInt(bid.balance), BigInt(0));
+  }
+
+  /**
+   * Check auction status
+   * @param {string} tokenId
+   * @param {string} collectionId
+   * @private
+   */
+  private async checkActiveAuction(tokenId: string, collectionId: string) {
+    const auction = await this.offersRepository.findOne({
+      where: { token_id: tokenId, collection_id: collectionId, status: 'active', type: 'Auction' },
+    });
+    if (!auction) {
+      throw new NotFoundException('Auction not found');
+    }
   }
 }

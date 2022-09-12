@@ -1,28 +1,54 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
-import { createConnection } from 'typeorm';
 
-import { getConfig } from '../../src/config';
-import { AppModule } from '../../src/app.module';
-import { ignoreQueryCase, useGlobalPipes } from '../../src/utils/application';
-import { OfferSortingRequest } from '../../src/utils/sorting/sorting-request';
-import { PaginationRequest } from '../../src/utils/pagination/pagination-request';
-import { OffersFilter } from '../../src/offers/dto/offers-filter';
+import { AppModule } from '@app/app.module';
+import { ignoreQueryCase, useGlobalPipes } from '@app/utils/application';
+import { OfferSortingRequest } from '@app/utils/sorting/sorting-request';
+import { PaginationRequest } from '@app/utils/pagination/pagination-request';
+import { OffersFilter } from '@app/offers/dto/offers-filter';
 import request from 'supertest';
-import { getConnectionOptions } from '../../src/database/connection-options';
-import { MarketConfig } from '../../src/config/market-config';
+import { getConnectionOptions } from '@app/database/connection-options';
+import { DataSource } from 'typeorm';
+import { appConfig, MarketConfig } from '@app/config';
 
 const testConfigFactory = (extra?: Partial<MarketConfig>) => (): MarketConfig => {
-  let config = getConfig();
-  config.postgresUrl = config.testingPostgresUrl;
+  let config = appConfig;
+  config.postgresUrl = appConfig.testingPostgresUrl;
   config = { ...config, ...(extra || {}) };
   return config;
 };
 
 type OverrideProviders = (builder: TestingModuleBuilder) => void;
 
-export const initApp = async (config?: Partial<MarketConfig>, overrideProviders?: OverrideProviders): Promise<INestApplication> => {
-  const testingModuleBuilder = await Test.createTestingModule({
+export const initApp = async (overrideProviders?: OverrideProviders): Promise<INestApplication> => {
+  const config = appConfig;
+  const databaseTestOptions = getConnectionOptions(config, true);
+  const mainDatabase = new DataSource(getConnectionOptions());
+  await mainDatabase.initialize();
+  const ifNotExist = await mainDatabase.query(
+    `select exists( SELECT datname FROM pg_catalog.pg_database WHERE lower(datname) = lower('${databaseTestOptions.database}'));`,
+  );
+
+  if (!ifNotExist[0].exists) {
+    await mainDatabase.query(`CREATE DATABASE ${databaseTestOptions.database}`);
+  }
+
+  const testDatabase = new DataSource(getConnectionOptions(config, true));
+
+  // Database initialization
+  await testDatabase
+    .initialize()
+    .then(() => {
+      console.log('Data Source has been initialized!');
+    })
+    .catch((err) => {
+      console.error('Error during Data Source initialization', err);
+    });
+
+  await mainDatabase.destroy();
+
+  // Create a new testing module for each test
+  const testingModuleBuilder = Test.createTestingModule({
     imports: [AppModule],
   });
 
@@ -32,23 +58,11 @@ export const initApp = async (config?: Partial<MarketConfig>, overrideProviders?
 
   const moduleFixture = await testingModuleBuilder.compile();
 
+  // Create application
   const app = moduleFixture.createNestApplication();
   ignoreQueryCase(app);
   useGlobalPipes(app);
-
   return app;
-};
-
-export const getMigrationsConnection = async (config, logging = false) => {
-  const connectionOptions = getConnectionOptions(config, true, logging);
-  return await createConnection({ ...connectionOptions, name: 'migrations' });
-};
-
-export const runMigrations = async (config) => {
-  const connection = await getMigrationsConnection(config);
-  await connection.dropDatabase();
-  await connection.runMigrations({ transaction: 'all' });
-  await connection.close();
 };
 
 /**
@@ -80,13 +94,17 @@ export const sortToString = (sortFilter: OfferSortingRequest) => {
  * @param {OffersFilter} offersFilter - { collectionId, searchText, searchLocale, minPrice, maxPrice, seller, traitsCount }
  * @param {OfferSortingRequest} sort - { sort: [{ order: 1, column: 'Price' }] } === desc(Price)
  */
-export const searchByFilterOffers = async (app: INestApplication, pagination: PaginationRequest, offersFilter: OffersFilter, sort: OfferSortingRequest) => {
+export const searchByFilterOffers = async (
+  app: INestApplication,
+  pagination: PaginationRequest,
+  offersFilter: OffersFilter,
+  sort: OfferSortingRequest,
+) => {
   let filterRequest = '/offers?';
 
   const { page, pageSize } = pagination;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { collectionId, searchLocale, minPrice, maxPrice, seller, numberOfAttributes, attributes: traits, isAuction, bidderAddress } = offersFilter;
+  const { collectionId, searchLocale, minPrice, maxPrice, seller, numberOfAttributes, isAuction, bidderAddress } = offersFilter;
 
   let { searchText } = offersFilter;
 

@@ -15,6 +15,12 @@ export class Tokens {
   @Column('varchar', { name: 'owner_token', length: 128, nullable: true })
   owner_token: string;
 
+  @Column('jsonb', { name: 'data', default: {} })
+  data: string;
+
+  @Column('jsonb', { name: 'nested', default: [] })
+  nested: string;
+
   @Column({
     type: 'timestamp',
     default: () => 'CURRENT_TIMESTAMP',

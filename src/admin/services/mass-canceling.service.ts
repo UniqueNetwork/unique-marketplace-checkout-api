@@ -1,23 +1,23 @@
-import { Injectable, Inject, Logger, BadRequestException, HttpStatus } from '@nestjs/common';
-import { Connection, In, IsNull, Not, Repository } from 'typeorm';
+import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { Keyring } from '@polkadot/api';
 import { KeyringPair } from '@polkadot/keyring/types';
-import { AuctionEntity, ContractAsk } from '../../entity';
-import { MarketConfig } from '../../config/market-config';
-import { AuctionStatus } from '../../auction/types';
+import { Collection, OffersEntity } from '../../entity';
+import { MarketConfig } from '@app/config';
+import { AuctionStatus, SellingMethod } from '../../types';
 import { ASK_STATUS } from '../../escrow/constants';
 import { MassCancelResult } from '../dto';
 
 @Injectable()
 export class MassCancelingService {
   private readonly logger: Logger;
-  private readonly contractAskRepository: Repository<ContractAsk>;
-  private readonly auctionRepository: Repository<AuctionEntity>;
+  private readonly offersEntityRepository: Repository<OffersEntity>;
+  private readonly collectionRepository: Repository<Collection>;
 
-  constructor(@Inject('DATABASE_CONNECTION') private connection: Connection, @Inject('CONFIG') private config: MarketConfig) {
+  constructor(private connection: DataSource, @Inject('CONFIG') private config: MarketConfig) {
     this.logger = new Logger(MassCancelingService.name);
-    this.contractAskRepository = connection.getRepository(ContractAsk);
-    this.auctionRepository = connection.getRepository(AuctionEntity);
+    this.offersEntityRepository = connection.getRepository(OffersEntity);
+    this.collectionRepository = connection.getRepository(Collection);
   }
 
   /**
@@ -36,7 +36,28 @@ export class MassCancelingService {
 
     const message = `${count} offers successfully canceled`;
 
-    this.logger.log(message);
+    return {
+      statusCode: HttpStatus.OK,
+      message,
+    };
+  }
+
+  /**
+   * Mass cancel all offers and auctions
+   * @return ({Promise<MassCancelResult>})
+   */
+  async massCancelSystem(): Promise<MassCancelResult> {
+    const fixPrice = await this.massFixPriceCancel();
+    const auction = await this.massAuctionCancel();
+
+    const count = fixPrice + auction;
+
+    if (count === 0) {
+      this.logger.error('No offers for cancel');
+      return;
+    }
+
+    const message = `${count} offers successfully canceled`;
 
     return {
       statusCode: HttpStatus.OK,
@@ -52,22 +73,19 @@ export class MassCancelingService {
   async massFixPriceCancel(): Promise<number> {
     const signer = this.getSigner();
 
-    const contractAsks = await this.contractAskRepository.find({
-      relations: ['auction'],
+    const offersEntities = await this.offersEntityRepository.find({
       where: {
+        type: SellingMethod.FixedPrice,
         address_from: Not(signer.address),
         status: ASK_STATUS.ACTIVE,
-        auction: {
-          id: IsNull(),
-        },
       },
     });
 
-    const contractAsksIds = contractAsks.map((ask) => ask.id);
+    const offersId = offersEntities.map((ask) => ask.id);
 
-    const { affected } = await this.contractAskRepository.update(
+    const { affected } = await this.offersEntityRepository.update(
       {
-        id: In(contractAsksIds),
+        id: In(offersId),
       },
       {
         status: ASK_STATUS.REMOVED_BY_ADMIN,
@@ -85,19 +103,17 @@ export class MassCancelingService {
   async massAuctionCancel(): Promise<number> {
     const signer = this.getSigner();
 
-    const auctions = await this.auctionRepository.find({
-      relations: ['contractAsk'],
+    const auctions = await this.offersEntityRepository.find({
       where: {
-        contractAsk: {
-          address_from: Not(signer.address),
-        },
-        status: AuctionStatus.active,
+        type: SellingMethod.Auction,
+        address_from: Not(signer.address),
+        status_auction: AuctionStatus.active,
       },
     });
 
     const auctionIds = auctions.map((auction) => auction.id);
 
-    const { affected } = await this.auctionRepository.update(
+    const { affected } = await this.offersEntityRepository.update(
       {
         id: In(auctionIds),
       },
@@ -107,6 +123,37 @@ export class MassCancelingService {
     );
 
     return affected;
+  }
+
+  /**
+   * Checking for Allowed Tokens
+   */
+  async allowedTokensInList(collectionId: number): Promise<number[]> {
+    const collection = await this.collectionRepository.findOne({
+      where: { id: collectionId.toString() },
+    });
+    const allowedList = [];
+    const allowedTokenArray = collection.allowedTokens.match(/[^(,\s]+|\([^)]+\)/g);
+
+    for (const token of allowedTokenArray) {
+      const rangeNumber = token.match(/\d+/g);
+      if (rangeNumber.length === 2) {
+        const rangeN = rangeNumber.map((number) => parseInt(number));
+        allowedList.push(...this.range(rangeN[0], rangeN[1]));
+      } else {
+        allowedList.push(parseInt(token));
+      }
+    }
+
+    return allowedList;
+  }
+
+  range(start, end) {
+    const list = [];
+    for (let i = start; i < end + 1; i++) {
+      list.push(parseInt(i));
+    }
+    return list;
   }
 
   /**

@@ -16,3 +16,24 @@ export const MONEY_TRANSFER_STATUS = {
   COMPLETED: 'completed',
   FAILED: 'failed',
 };
+
+export interface IOfferInsertData {
+  collectionId: number;
+  tokenId: number;
+  addressFrom: string;
+  addressTo: string;
+  price: number;
+  currency: string;
+}
+
+export interface IRegisterTransferAddress {
+  Ethereum?: string;
+  Substrate?: string;
+}
+
+export interface IRegisterTransferData {
+  collectionId: number;
+  tokenId: number;
+  addressFrom: IRegisterTransferAddress;
+  addressTo: IRegisterTransferAddress;
+}

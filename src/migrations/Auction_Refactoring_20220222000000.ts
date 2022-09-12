@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner, TableUnique, TableIndex } from 'typeorm';
-import {AuctionStatus, BidStatus} from "../auction/types";
+import { AuctionStatus, BidStatus } from '../types';
 
 export class Auction_Refactoring_20220222000000 implements MigrationInterface {
   name = 'Auction_Refactoring_20220222000000';
@@ -9,8 +9,6 @@ export class Auction_Refactoring_20220222000000 implements MigrationInterface {
     await queryRunner.query(`ALTER TABLE "bids" DROP COLUMN "pending_amount"`);
 
     await queryRunner.query(`ALTER TABLE "bids" ADD "block_number" bigint`);
-
-    await queryRunner.dropUniqueConstraint('bids', 'UNIQUE_bidder_auction');
 
     await queryRunner.createIndex(
       'bids',
@@ -28,14 +26,6 @@ export class Auction_Refactoring_20220222000000 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropIndex('bids', 'IX_bidder_auction');
-
-    await queryRunner.createUniqueConstraint(
-      'bids',
-      new TableUnique({
-        name: 'UNIQUE_bidder_auction',
-        columnNames: ['auction_id', 'bidder_address'],
-      }),
-    );
 
     await queryRunner.query(`ALTER TABLE "bids" DROP COLUMN "block_number"`);
 

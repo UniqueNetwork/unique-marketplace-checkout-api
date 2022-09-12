@@ -52,22 +52,12 @@ export class OffersFilter {
 
   @ApiProperty({
     name: 'attributes',
-    items: {
-      type: 'object',
-      properties: {
-        key: {
-          type: 'string',
-        },
-        attribute: {
-          type: 'string',
-        },
-      },
-    },
+    items: { type: 'string', default: '' },
     required: false,
     type: 'array',
     isArray: true,
   })
-  public attributes?: Array<filterAttributes>;
+  public attributes?: string[];
 
   @ApiProperty({
     required: false,

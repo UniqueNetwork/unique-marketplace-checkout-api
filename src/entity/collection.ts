@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CollectionImportType, CollectionMode, CollectionStatus } from '../admin/types/collection';
+import { CollectionImportType, CollectionStatus } from '../admin/types/collection';
 import { Column, CreateDateColumn, Entity, UpdateDateColumn } from 'typeorm';
+import { CollectionMode } from '@unique-nft/substrate-client/tokens';
 
 @Entity('collections', { schema: 'public' })
 export class Collection {
@@ -44,4 +45,7 @@ export class Collection {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column('jsonb', { name: 'data', default: {} })
+  data: string;
 }

@@ -1,35 +1,30 @@
 import { encodeAddress } from '@polkadot/util-crypto';
 import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { AuctionStatus } from '../types';
-import { Connection, Repository } from 'typeorm';
-import { AuctionEntity } from '../entities';
-import { BroadcastService } from '../../broadcast/services/broadcast.service';
-import { BlockchainBlock, ContractAsk } from '../../entity';
+import { DataSource, Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
-import { ASK_STATUS } from '../../escrow/constants';
-import { OfferContractAskDto } from '../../offers/dto/offer-dto';
-import { DateHelper } from '../../utils/date-helper';
-import { ExtrinsicSubmitter } from './helpers/extrinsic-submitter';
-import { MarketConfig } from '../../config/market-config';
+
+import { BroadcastService } from '@app/broadcast/services/broadcast.service';
+import { ASK_STATUS } from '@app/escrow/constants';
+import { BlockchainBlock, OffersEntity } from '@app/entity';
+import { MarketConfig } from '@app/config';
+
+import { DateHelper } from '@app/utils/date-helper';
+import { getTokenDescription } from '@app/utils';
+
+import { AuctionStatus } from '@app/types';
+import { AuctionDto, OfferEntityDto } from '@app/offers/dto/offer-dto';
 import { SearchIndexService } from './search-index.service';
 import { AuctionCredentials } from '../providers';
-import { InjectSentry, SentryService } from '../../utils/sentry';
-import { subToEth } from '../../utils/blockchain/web3';
-import { CreateAskAndBroadcastArgs } from '../types/auction';
-import { InjectUniqueAPI } from '../../blockchain';
-
-export type CreateAuctionArgs = {
-  collectionId: string;
-  tokenId: string;
-  ownerAddress: string;
-  minutes: number;
-  days: number;
-  startPrice: bigint;
-  priceStep: bigint;
-  tx: string;
-};
+import { InjectSentry, SentryService } from '@app/utils/sentry';
+import { CreateAuctionAndBroadcastArgs } from '@app/types/auction';
+import { CreateAuctionRequest } from '../requests';
+import { Web3Service } from '@app/uniquesdk/web3.service';
+import { InjectUniqueSDK } from '@app/uniquesdk';
+import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 type FailedAuctionArgs = {
+  collectionId: string;
+  tokenId: string;
   startPrice: bigint;
   priceStep: bigint;
   days: number;
@@ -39,32 +34,29 @@ type FailedAuctionArgs = {
 @Injectable()
 export class AuctionCreationService {
   private readonly logger = new Logger(AuctionCreationService.name);
-
-  private readonly auctionRepository: Repository<AuctionEntity>;
   private blockchainBlockRepository: Repository<BlockchainBlock>;
-  private readonly contractAskRepository: Repository<ContractAsk>;
+  private readonly offersEntityRepository: Repository<OffersEntity>;
 
   constructor(
-    @Inject('DATABASE_CONNECTION') private connection: Connection,
+    private connection: DataSource,
     private broadcastService: BroadcastService,
-    @InjectUniqueAPI() private uniqueApi: any,
-    private readonly extrinsicSubmitter: ExtrinsicSubmitter,
+    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
+    private readonly web3conn: Web3Service,
     @Inject('CONFIG') private config: MarketConfig,
     private searchIndexService: SearchIndexService,
     @Inject('AUCTION_CREDENTIALS') private auctionCredentials: AuctionCredentials,
     @InjectSentry() private readonly sentryService: SentryService,
   ) {
-    this.contractAskRepository = connection.getRepository(ContractAsk);
+    this.offersEntityRepository = connection.getRepository(OffersEntity);
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
-    this.auctionRepository = connection.manager.getRepository(AuctionEntity);
   }
 
   async checkOwner(collectionId: number, tokenId: number): Promise<boolean> {
-    const token = (await this.uniqueApi.query.nonfungible.tokenData(collectionId, tokenId)).toJSON();
+    const token = (await this.uniqueProvider.stateService.tokenData(collectionId, tokenId)).json;
     const owner = token['owner'];
 
     const auctionSubstract = encodeAddress(this.auctionCredentials.uniqueAddress);
-    const auctionEth = subToEth(auctionSubstract).toLowerCase();
+    const auctionEth = this.web3conn.subToEth(auctionSubstract).toLowerCase();
 
     if (owner?.substrate) {
       return encodeAddress(owner.substrate) === auctionSubstract;
@@ -80,13 +72,40 @@ export class AuctionCreationService {
    * Create auction
    * @param createAuctionRequest
    */
-  async create(createAuctionRequest: CreateAuctionArgs): Promise<OfferContractAskDto> {
-    const { collectionId, tokenId, ownerAddress, days, minutes, startPrice, priceStep, tx } = createAuctionRequest;
+  async create(createAuctionRequest: CreateAuctionRequest): Promise<OfferEntityDto> {
+    const { days, minutes, startPrice, priceStep, signature, signerPayloadJSON } = createAuctionRequest;
+
+    const { blockNumber, collectionId, tokenId, addressFrom, isCompleted, internalError, blockHash } =
+      await this.uniqueProvider.transferService.submitTransferToken(signerPayloadJSON, signature);
+
+    if (!isCompleted) {
+      this.sentryService.instance().captureException(new BadRequestException(internalError), {
+        tags: { section: 'contract_ask' },
+      });
+      throw new BadRequestException({
+        statusCode: HttpStatus.CONFLICT,
+        message: `Failed at block # ${blockNumber} (${blockHash.toHex()})`,
+      });
+    }
+
+    if (blockNumber === undefined || blockNumber === null || blockNumber.toString() === '0') {
+      this.sentryService.message('sendTransferExtrinsic');
+
+      throw new BadRequestException({
+        statusCode: HttpStatus.CONFLICT,
+        message: 'Block number is not defined',
+      });
+    }
 
     let stopAt = DateHelper.addDays(days);
     if (minutes) stopAt = DateHelper.addMinutes(minutes, stopAt);
 
-    const block = await this.sendTransferExtrinsic(tx);
+    const block = this.blockchainBlockRepository.create({
+      network: this.config.blockchain.unique.network,
+      block_number: blockNumber.toString(),
+      created_at: new Date(),
+    });
+
     await this.connection.createQueryBuilder().insert().into(BlockchainBlock).values(block).orIgnore().execute();
 
     this.logger.debug(`Token transfer block number: ${block.block_number}`);
@@ -100,11 +119,11 @@ export class AuctionCreationService {
       });
     }
 
-    const offer = await this.createAskAndBroadcast({
+    const offer = await this.createAuctionBroadcast({
       blockNumber: block.block_number,
-      collectionId,
-      tokenId,
-      ownerAddress,
+      collectionId: collectionId.toString(),
+      tokenId: tokenId.toString(),
+      ownerAddress: addressFrom,
       priceStep,
       startPrice,
       stopAt,
@@ -113,11 +132,16 @@ export class AuctionCreationService {
     return offer;
   }
 
-  async createAskAndBroadcast(data: CreateAskAndBroadcastArgs): Promise<OfferContractAskDto> {
+  /**
+   * Create ask and broadcast it
+   * @param data
+   */
+  async createAuctionBroadcast(data: CreateAuctionAndBroadcastArgs): Promise<OfferEntityDto> {
     const { blockNumber, collectionId, tokenId, ownerAddress, startPrice, priceStep, stopAt } = data;
 
-    const contractAsk = await this.contractAskRepository.create({
+    const newAuction = this.offersEntityRepository.create({
       id: uuid(),
+      type: 'Auction',
       block_number_ask: blockNumber,
       network: this.config.blockchain.unique.network,
       collection_id: collectionId,
@@ -127,90 +151,73 @@ export class AuctionCreationService {
       status: ASK_STATUS.ACTIVE, // todo - add appropriate status
       price: startPrice.toString(),
       currency: '',
-      auction: {
-        stopAt,
-        status: AuctionStatus.active,
-        startPrice: startPrice.toString(),
-        priceStep: priceStep.toString(),
-      },
+      stopAt,
+      status_auction: AuctionStatus.active,
+      startPrice: startPrice.toString(),
+      priceStep: priceStep.toString(),
     });
 
-    await this.contractAskRepository.save(contractAsk);
-    const offer = OfferContractAskDto.fromContractAsk(contractAsk);
-    await this.searchIndexService.addSearchIndexIfNotExists({
+    const newOffer = await this.offersEntityRepository.save(newAuction);
+    const offer = OfferEntityDto.fromOffersEntity(newAuction);
+
+    const getAcutionDto = (offer: OffersEntity): AuctionDto => ({
+      id: offer.id,
+      createdAt: offer.created_at,
+      updatedAt: offer.updated_at,
+      priceStep: offer.priceStep,
+      startPrice: offer.startPrice,
+      status: offer.status_auction as AuctionStatus,
+      stopAt: offer.stopAt,
+    });
+
+    offer.auction = offer?.auction || getAcutionDto(newOffer);
+
+    const searchIndex = await this.searchIndexService.addSearchIndexIfNotExists({
       collectionId: Number(collectionId),
       tokenId: Number(tokenId),
     });
 
+    offer.tokenDescription = getTokenDescription(searchIndex, collectionId, tokenId);
+
     this.broadcastService.sendAuctionStarted(offer);
 
     const auctionCreatedData = {
-      subject: 'Create offer for auction',
+      subject: 'Create auction',
+      message: `Auction created for collectionId: ${collectionId} tokenId: ${tokenId}`,
       thread: 'auction',
       collection: collectionId,
       token: tokenId,
       price: startPrice.toString(),
       block: blockNumber,
-      auction: {
-        stopAt: `${stopAt}`,
-        startPrice: startPrice.toString(),
-        priceStep: priceStep.toString(),
-        status: 'ACTIVE',
-      },
+      stopAt: `${stopAt}`,
+      startPrice: startPrice.toString(),
+      priceStep: priceStep.toString(),
+      status_auction: 'ACTIVE',
       address_from: ownerAddress,
-      address_from_n42: encodeAddress(ownerAddress),
     };
     this.logger.debug(JSON.stringify(auctionCreatedData));
 
     return offer;
   }
 
+  /**
+   * Create failed auction
+   * @param args
+   */
   async saveFailedAuction(args: FailedAuctionArgs): Promise<void> {
-    await this.auctionRepository.save({
+    await this.offersEntityRepository.save({
       id: uuid(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      type: 'Auction',
+      collection: args.collectionId,
+      token: args.tokenId,
+      created_at_ask: new Date(),
+      updated_at: new Date(),
       priceStep: args.priceStep.toString(),
       startPrice: args.startPrice.toString(),
-      status: AuctionStatus.failed,
+      status_auction: AuctionStatus.failed,
       stopAt: new Date(),
       bids: [],
     });
-  }
-
-  private async sendTransferExtrinsic(tx: string): Promise<BlockchainBlock> {
-    try {
-      const { blockNumber } = await this.extrinsicSubmitter.submit(this.uniqueApi, tx);
-
-      if (blockNumber === undefined || blockNumber === null || blockNumber.toString() === '0') {
-        this.sentryService.message('sendTransferExtrinsic');
-
-        throw new BadRequestException({
-          statusCode: HttpStatus.CONFLICT,
-          message: 'Block number is not defined',
-        });
-      }
-      this.logger.debug(
-        `{subject:'Send Transfer Extrinsic', thread:'transfer extrinsic', network: '${
-          this.config.blockchain.unique.network
-        }', block_number: '${blockNumber.toString()}' }`,
-      );
-      return this.blockchainBlockRepository.create({
-        network: this.config.blockchain.unique.network,
-        block_number: blockNumber.toString(),
-        created_at: new Date(),
-      });
-    } catch (error) {
-      this.logger.warn(error);
-      this.sentryService.instance().captureException(new BadRequestException(error), {
-        tags: { section: 'contract_ask' },
-      });
-      throw new BadRequestException({
-        statusCode: HttpStatus.CONFLICT,
-        message: 'Failed send transfer extrinsic',
-        error: error.message,
-      });
-    }
   }
 
   public get isConnected(): boolean {

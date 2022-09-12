@@ -22,9 +22,9 @@ import {
   EnableCollectionDTO,
   EnableCollectionResult,
   ListCollectionResult,
-  MassAuctionSaleResult,
+  MassAuctionSaleResultDto,
   MassFixPriceSaleDTO,
-  MassFixPriceSaleResult,
+  MassFixPriceSaleResultDto,
   ResponseAdminDto,
   ResponseAdminForbiddenDto,
   ResponseAdminUnauthorizedDto,
@@ -134,10 +134,12 @@ export class AdminController {
     summary: 'Mass fix price sale',
     description: fs.readFileSync('docs/mass_fixprice_sale.md').toString(),
   })
-  @ApiResponse({ status: HttpStatus.OK, type: MassFixPriceSaleResult })
+  @ApiResponse({ status: HttpStatus.OK, type: MassFixPriceSaleResultDto })
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @UseGuards(AuthGuard, MainSaleSeedGuard)
-  async massFixPriceSale(@Body(new ValidationPipe({ transform: true })) data: MassFixPriceSaleDTO): Promise<MassFixPriceSaleResult> {
+  async massFixPriceSale(
+    @Body(new ValidationPipe({ transform: true })) data: MassFixPriceSaleDTO,
+  ): Promise<MassFixPriceSaleResultDto | unknown> {
     return await this.massSaleService.massFixPriceSale(data);
   }
 
@@ -147,10 +149,10 @@ export class AdminController {
     summary: 'Mass auction sale',
     description: fs.readFileSync('docs/mass_auction_sale.md').toString(),
   })
-  @ApiResponse({ status: HttpStatus.OK, type: MassAuctionSaleResult })
+  @ApiResponse({ status: HttpStatus.OK, type: MassAuctionSaleResultDto })
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @UseGuards(AuthGuard, MainSaleSeedGuard)
-  async massAuctionSale(@Body(new ValidationPipe({ transform: true })) data: MassAuctionSaleDTO): Promise<MassAuctionSaleResult> {
+  async massAuctionSale(@Body(new ValidationPipe({ transform: true })) data: MassAuctionSaleDTO): Promise<MassAuctionSaleResultDto> {
     return await this.massSaleService.massAuctionSale(data);
   }
 

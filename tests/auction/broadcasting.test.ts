@@ -4,7 +4,7 @@ import { initApp } from '../data';
 import { connect as connectSocket, Socket } from 'socket.io-client';
 import { BroadcastIOEmitter, ClientToServerEvents, ServerToClientEvents } from '../../src/broadcast/types';
 import { PostgresIoAdapter } from '../../src/broadcast/services/postgres-io.adapter';
-import { MarketConfig } from '../../src/config/market-config';
+import { MarketConfig } from '@app/config';
 import { INestApplication } from '@nestjs/common';
 import { OfferContractAskDto } from '../../src/offers/dto/offer-dto';
 import { Test } from '@nestjs/testing';

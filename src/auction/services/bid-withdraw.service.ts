@@ -1,19 +1,20 @@
 import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { Connection, Repository } from 'typeorm';
-import { AuctionEntity, BidEntity } from '../entities';
-import { ContractAsk } from '../../entity';
-import { BroadcastService } from '../../broadcast/services/broadcast.service';
-import { ApiPromise } from '@polkadot/api';
-import { MarketConfig } from '../../config/market-config';
-import { ExtrinsicSubmitter } from './helpers/extrinsic-submitter';
-import { BidStatus } from '../types';
-import { DatabaseHelper } from './helpers/database-helper';
+import { DataSource, Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
-import { AuctionCredentials } from '../providers';
 import { encodeAddress } from '@polkadot/util-crypto';
+import { KeyringProvider } from '@unique-nft/accounts/keyring';
+import { SignatureType } from '@unique-nft/accounts';
+
+import { AuctionBidEntity, MoneyTransfer, OffersEntity } from '@app/entity';
+import { MONEY_TRANSFER_STATUS, MONEY_TRANSFER_TYPES } from '@app/escrow/constants';
+import { InjectSentry, SentryService } from '@app/utils/sentry';
+import { MarketConfig } from '@app/config';
+
+import { BidStatus, SellingMethod } from '@app/types';
+import { DatabaseHelper } from './helpers/database-helper';
 import { BidsWitdrawByOwner, BidsWithdraw } from '../responses';
-import { InjectSentry, SentryService } from '../../utils/sentry';
-import { InjectKusamaAPI } from '../../blockchain';
+import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk';
+import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 type BidWithdrawArgs = {
   collectionId: number;
@@ -29,27 +30,22 @@ type BidsWirthdrawArgs = {
 @Injectable()
 export class BidWithdrawService {
   private readonly logger = new Logger(BidWithdrawService.name);
-
-  private readonly bidRepository: Repository<BidEntity>;
-  private readonly auctionRepository: Repository<AuctionEntity>;
-  private readonly contractAskRepository: Repository<ContractAsk>;
+  private readonly bidRepository: Repository<AuctionBidEntity>;
+  private moneyTransferRepository: Repository<MoneyTransfer>;
 
   constructor(
-    @Inject('DATABASE_CONNECTION') private connection: Connection,
-    private broadcastService: BroadcastService,
-    @InjectKusamaAPI() private kusamaApi: ApiPromise,
-    @Inject('CONFIG') private config: MarketConfig,
-    @Inject('AUCTION_CREDENTIALS') private auctionCredentials: AuctionCredentials,
-    private readonly extrinsicSubmitter: ExtrinsicSubmitter,
+    private connection: DataSource,
+    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
+    @InjectKusamaSDK() private readonly kusamaProvider: SdkProvider,
     @InjectSentry() private readonly sentryService: SentryService,
+    @Inject('CONFIG') private config: MarketConfig,
   ) {
-    this.bidRepository = connection.manager.getRepository(BidEntity);
-    this.auctionRepository = connection.manager.getRepository(AuctionEntity);
-    this.contractAskRepository = connection.getRepository(ContractAsk);
+    this.bidRepository = connection.manager.getRepository(AuctionBidEntity);
+    this.moneyTransferRepository = connection.getRepository(MoneyTransfer);
   }
 
   async withdrawBidByBidder(args: BidWithdrawArgs): Promise<void> {
-    let withdrawingBid: BidEntity;
+    let withdrawingBid: AuctionBidEntity;
 
     try {
       withdrawingBid = await this.tryCreateWithdrawingBid(args);
@@ -64,8 +60,8 @@ export class BidWithdrawService {
     }
   }
 
-  async withdrawByMarket(auction: AuctionEntity, bidderAddress: string, amount: bigint): Promise<void> {
-    const withdrawingBid = this.connection.manager.create(BidEntity, {
+  async withdrawByMarket(auction: OffersEntity, bidderAddress: string, amount: bigint): Promise<void> {
+    const withdrawingBid = this.connection.manager.create(AuctionBidEntity, {
       id: uuid(),
       status: BidStatus.minting,
       bidderAddress: encodeAddress(bidderAddress),
@@ -81,22 +77,37 @@ export class BidWithdrawService {
     await this.makeWithdrawalTransfer(withdrawingBid);
   }
 
-  async makeWithdrawalTransfer(withdrawingBid: BidEntity): Promise<void> {
-    const auctionKeyring = this.auctionCredentials.keyring;
+  /**
+   * Make withdrawal transfer for bid
+   * @param withdrawingBid
+   */
+  async makeWithdrawalTransfer(withdrawingBid: AuctionBidEntity): Promise<void> {
     const amount = BigInt(withdrawingBid.amount) * -1n;
 
-    const nonce = await this.kusamaApi.rpc.system.accountNextIndex(auctionKeyring.address);
+    const auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
 
-    const tx = await this.kusamaApi.tx.balances.transferKeepAlive(withdrawingBid.bidderAddress, amount).signAsync(auctionKeyring, { nonce });
-
-    await this.extrinsicSubmitter
-      .submit(this.kusamaApi, tx)
+    await this.kusamaProvider.transferService
+      .moneyTransfer(auctionAccount, withdrawingBid.bidderAddress, amount)
       .then(async ({ blockNumber }) => {
         await this.bidRepository.update(withdrawingBid.id, {
           status: BidStatus.finished,
           blockNumber: blockNumber.toString(),
         });
-        this.logger.debug(`Bid make Withdraw transfer id: ${withdrawingBid.id},  status: ${BidStatus.finished}, blockNumber: ${blockNumber.toString()} `);
+        this.logger.debug(
+          `Bid make Withdraw transfer id: ${withdrawingBid.id},  status: ${BidStatus.finished}, blockNumber: ${blockNumber.toString()} `,
+        );
+        await this.moneyTransferRepository.save({
+          id: uuid(),
+          amount: `${amount}`,
+          block_number: `${blockNumber}`,
+          network: 'kusama',
+          type: MONEY_TRANSFER_TYPES.WITHDRAW,
+          status: MONEY_TRANSFER_STATUS.COMPLETED,
+          created_at: new Date(),
+          updated_at: new Date(),
+          extra: { address: withdrawingBid.bidderAddress },
+          currency: '2', // TODO: check this
+        });
       })
       .catch(async (error) => {
         const fullError = {
@@ -108,19 +119,35 @@ export class BidWithdrawService {
         this.logger.error(JSON.stringify(fullError));
 
         await this.bidRepository.update(withdrawingBid.id, { status: BidStatus.error });
+        await this.moneyTransferRepository.save({
+          id: uuid(),
+          amount: `-${amount}`,
+          block_number: `${withdrawingBid.blockNumber}`,
+          network: 'kusama',
+          type: MONEY_TRANSFER_TYPES.DEPOSIT,
+          status: MONEY_TRANSFER_STATUS.FAILED,
+          created_at: new Date(),
+          updated_at: new Date(),
+          extra: { address: withdrawingBid.bidderAddress },
+          currency: '2', // TODO: check this
+        });
       });
   }
 
   // todo - unite into single method with withdrawByMarket?
-  private async tryCreateWithdrawingBid(args: BidWithdrawArgs): Promise<BidEntity> {
+  /**
+   * Create withdrawing bid for bidder
+   * @param args
+   * @private
+   */
+  private async tryCreateWithdrawingBid(args: BidWithdrawArgs): Promise<AuctionBidEntity> {
     const { collectionId, tokenId, bidderAddress } = args;
 
-    return this.connection.transaction<BidEntity>('REPEATABLE READ', async (transactionEntityManager) => {
+    return this.connection.transaction<AuctionBidEntity>('REPEATABLE READ', async (transactionEntityManager) => {
       const databaseHelper = new DatabaseHelper(transactionEntityManager);
 
-      const contractAsk = await databaseHelper.getActiveAuctionContract({ collectionId, tokenId });
-      const auctionId = contractAsk.auction.id;
-
+      const auction = await databaseHelper.getActiveAuction({ collectionId, tokenId });
+      const auctionId = auction.id;
       const bidderActualSum = await databaseHelper.getUserActualSum({ auctionId, bidderAddress });
       const bidderPendingSum = await databaseHelper.getUserPendingSum({ auctionId, bidderAddress });
 
@@ -143,13 +170,13 @@ export class BidWithdrawService {
         throw new Error(`You are winner at this moment, please wait your bid to be overbidden`);
       }
 
-      const withdrawingBid = transactionEntityManager.create(BidEntity, {
+      const withdrawingBid = transactionEntityManager.create(AuctionBidEntity, {
         id: uuid(),
         status: BidStatus.minting,
         bidderAddress: encodeAddress(bidderAddress),
         amount: (-1n * bidderActualSum).toString(),
         balance: (bidderPendingSum - bidderActualSum).toString(),
-        auctionId: contractAsk.auction.id,
+        auctionId: auction.id,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -163,7 +190,7 @@ export class BidWithdrawService {
         bidderAddress_n42: encodeAddress(bidderAddress),
         amount: (-1n * bidderActualSum).toString(),
         balance: (bidderPendingSum - bidderActualSum).toString(),
-        auctionId: contractAsk.auction.id,
+        auctionId: auction.id,
         log: 'tryCreateWithdrawingBid',
       };
       this.logger.debug(JSON.stringify(bidTransaction));
@@ -171,24 +198,28 @@ export class BidWithdrawService {
     });
   }
 
+  /**
+   * Get bids for withdrawing
+   * @param owner
+   * @private
+   */
   private async _getBidsForWithdraw(owner: string): Promise<Array<BidsWitdrawByOwner>> {
     const results = await this.connection.manager.query(
       `
       with my_list_auction as (
-        select auction_id from bids where bidder_address = $1
+        select auction_id from auction_bids where bidder_address = $1
         group by auction_id
     ),
     sum_amount_auctions as (
         select distinct b.auction_id, bidder_address, sum(amount) over (partition by bidder_address, b.auction_id) sum_amount
-        from bids b inner join  my_list_auction my on my.auction_id = b.auction_id
+        from auction_bids b inner join  my_list_auction my on my.auction_id = b.auction_id
     ),
     my_withdraws as (
         select auction_id, bidder_address, sum_amount amount, rank() over (partition by auction_id order by sum_amount desc ) rank
         from sum_amount_auctions
     )
-    select distinct  auction_id "auctionId", amount, contract_ask_id "contractAskId", collection_id "collectionId", token_id "tokenId" from my_withdraws
-    inner join auctions auc on auc.id = auction_id
-    inner join contract_ask ca on ca.id = auc.contract_ask_id
+    select distinct  auction_id "auctionId", amount, collection_id "collectionId", token_id "tokenId" from my_withdraws
+    inner join offers ca on ca.id = auction_id
     where rank <> 1 and amount > 0 and bidder_address = $1
       `,
       [owner],
@@ -196,38 +227,37 @@ export class BidWithdrawService {
     return results;
   }
 
+  /**
+   * Get Leader bids
+   * @param {String} owner - owner address
+   * @private
+   */
   private async _getLeaderBids(owner: string): Promise<Array<BidsWitdrawByOwner>> {
     const results = await this.connection.manager.query(
       `
-    with auctions as (
+     with auctions_data as (
       select *, rank() over (partition by auction_id order by sum_amount desc) rank
       from (
-               select distinct auction_id,
-                               bidder_address,
-                               contract_ask_id,
-                               collection_id,
-                               token_id,
-                               sum(amount) over (partition by bidder_address, auction_id) sum_amount
-               from bids
-                        left join auctions a on bids.auction_id = a.id
-                        left join contract_ask ca on a.contract_ask_id = ca.id
-               where a.status in ('active', 'created')
+               select distinct auction_id,bidder_address,collection_id, token_id, sum(amount) over (partition by bidder_address, auction_id) sum_amount
+                from auction_bids bids
+                left join offers a on bids.auction_id = a.id
+               where a.status_auction in ('active', 'created')
            ) temp
-  )
-  select auction_id      "auctionId",
-         sum_amount      amount,
-         contract_ask_id "contractAskId",
-         collection_id   "collectionId",
-         token_id        "tokenId"
-  from auctions
-  where rank = 1
-    and bidder_address = $1
+      )
+    select auction_id "auctionId", sum_amount amount, collection_id "collectionId", token_id "tokenId"
+    from auctions_data
+    where rank = 1 and bidder_address = $1
     `,
       [owner],
     );
     return results;
   }
 
+  /**
+   * Get bids for withdrawing
+   * @param owner
+   * @returns {Promise<Array<BidsWitdrawByOwner>>}
+   */
   async getBidsForWithdraw(owner: string): Promise<BidsWithdraw> {
     let bidsWithdraw = [];
     let leaderBids = [];
@@ -252,18 +282,17 @@ export class BidWithdrawService {
     };
   }
 
+  /**
+   * Withdraw bids for user
+   * @param args
+   */
   async withdrawBidsByBidder(args: BidsWirthdrawArgs): Promise<void> {
     const query = this.connection
-      .createQueryBuilder(ContractAsk, 'contract_ask')
+      .createQueryBuilder(OffersEntity, 'offerAuction')
       .select(['collection_id', 'token_id'])
-      .distinct()
-      .innerJoin(
-        (subQuery) => {
-          return subQuery.from(AuctionEntity, 'auc').where('auc.id in (:...auctionIds)', { auctionIds: args.auctionIds });
-        },
-        'auc',
-        'auc.contract_ask_id = contract_ask.id',
-      );
+      .andWhere('offerAuction.id in (:...auctionIds)', { auctionIds: args.auctionIds })
+      .andWhere('offerAuction.type = :type', { type: SellingMethod.Auction })
+      .distinct();
 
     for (const item of await query.execute()) {
       await this.withdrawBidByBidder({
