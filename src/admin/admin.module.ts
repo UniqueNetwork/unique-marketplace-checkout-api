@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AdminController } from './admin.controller';
-import { AdminService, CollectionsService, MassCancelingService, MassSaleService, TokenService } from './services';
+import { AdminService, CollectionsService, MassCancelingService, MassSaleService, TokenService, FiatSaleService } from './services';
 import { ConfigServiceModule } from '@app/config/module';
 import { MarketConfig } from '@app/config';
 import { AuctionModule } from '@app/auction/auction.module';
@@ -22,7 +22,7 @@ import { HelperService } from '@app/helpers/helper.service';
     AuctionModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService, CollectionsService, MassSaleService, TokenService, MassCancelingService, HelperService],
+  providers: [AdminService, CollectionsService, MassSaleService, TokenService, MassCancelingService, HelperService, FiatSaleService],
   exports: [AdminService, MassSaleService, MassCancelingService, TokenService],
 })
 export class AdminModule {}

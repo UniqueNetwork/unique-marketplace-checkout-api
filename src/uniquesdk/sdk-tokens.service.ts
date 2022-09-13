@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Sdk } from '@unique-nft/substrate-client';
 import '@unique-nft/substrate-client/tokens';
-import { NestedToken } from '@unique-nft/substrate-client/tokens';
+import { NestedToken, AccountTokensResult } from '@unique-nft/substrate-client/tokens';
 
 export type BundleType = {
   collectionId: number;
@@ -54,7 +54,7 @@ export class SdkTokensService {
     }
   }
 
-  async accountTokens(collection: number, address: string): Promise<any> {
+  async accountTokens(collection: number, address: string): Promise<AccountTokensResult> {
     return await this.sdk.tokens.getAccountTokens({
       collectionId: collection,
       address: address,

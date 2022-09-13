@@ -1,6 +1,8 @@
 import * as path from 'path';
 import 'dotenv/config';
 
+import { CurrencyNames } from '@app/types';
+
 import { MarketConfig, MarketType } from './types';
 
 export const appConfig: MarketConfig = {
@@ -84,6 +86,13 @@ export const appConfig: MarketConfig = {
     commission: parseInt(process.env.AUCTION_COMMISSION || '10', 10),
   },
   ipfs: process.env.IPFS || 'https://ipfs.uniquenetwork.dev/ipfs',
+  payment: {
+    fiatSeed: process.env.FIAT_SEED,
+    defaultCurrency: (process.env.CURRENT_CURRENCY as CurrencyNames) || CurrencyNames.USD,
+    checkout: {
+      secretKey: process.env.CHECKOUT_SECRET_KEY || '',
+    },
+  },
 };
 
 export const configProviders = [

@@ -1,5 +1,7 @@
 import { SentryModuleOptions } from '../utils/sentry';
 
+import { CurrencyNames } from '@app/types';
+
 interface EscrowConfig {
   wsEndpoint: string;
   network: string;
@@ -73,4 +75,11 @@ export interface MarketConfig {
     };
   };
   ipfs: string;
+  payment: {
+    fiatSeed: string;
+    defaultCurrency: CurrencyNames;
+    checkout: {
+      secretKey: string;
+    };
+  };
 }
