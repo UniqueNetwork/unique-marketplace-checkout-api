@@ -87,7 +87,6 @@ export const appConfig: MarketConfig = {
   },
   ipfs: process.env.IPFS || 'https://ipfs.uniquenetwork.dev/ipfs',
   payment: {
-    fiatSeed: process.env.FIAT_SEED,
     defaultCurrency: (process.env.CURRENT_CURRENCY as CurrencyNames) || CurrencyNames.USD,
     checkout: {
       secretKey: process.env.CHECKOUT_SECRET_KEY || '',

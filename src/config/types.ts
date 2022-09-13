@@ -76,7 +76,6 @@ export interface MarketConfig {
   };
   ipfs: string;
   payment: {
-    fiatSeed: string;
     defaultCurrency: CurrencyNames;
     checkout: {
       secretKey: string;
