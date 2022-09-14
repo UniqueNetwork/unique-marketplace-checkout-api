@@ -40,3 +40,10 @@ export class MassFiatSaleResultDto {
   @ApiProperty()
   data: number[];
 }
+
+export class MassCancelFiatResult {
+  @ApiProperty({ default: HttpStatus.OK })
+  statusCode = HttpStatus.OK;
+  @ApiProperty({ example: '{count} offers successfully canceled' })
+  message: string;
+}

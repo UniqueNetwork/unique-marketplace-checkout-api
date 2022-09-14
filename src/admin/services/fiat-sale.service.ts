@@ -12,7 +12,7 @@ import { SellingMethod } from '@app/types';
 import { SearchIndexService } from '@app/auction/services/search-index.service';
 import { InjectUniqueSDK } from '@app/uniquesdk';
 
-import { MassFiatSaleDTO, MassFiatSaleResultDto } from '../dto';
+import { MassFiatSaleDTO, MassFiatSaleResultDto, MassCancelFiatResult } from '../dto';
 
 @Injectable()
 export class FiatSaleService {
@@ -93,6 +93,24 @@ export class FiatSaleService {
       statusCode: HttpStatus.OK,
       message: 'Mass fiat listing completed',
       data: saveOffers.map(({ token_id }) => parseInt(token_id)),
+    };
+  }
+
+  async massCancelFiat(): Promise<MassCancelFiatResult> {
+    const mainAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
+    const { affected } = await this.offersRepository.update(
+      {
+        type: SellingMethod.Fiat,
+        status: ASK_STATUS.ACTIVE,
+        address_from: mainAccount.instance.address,
+      },
+      {
+        status: ASK_STATUS.CANCELLED,
+      },
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      message: `${affected} offers successfully canceled`,
     };
   }
 }

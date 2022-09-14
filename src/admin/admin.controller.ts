@@ -35,6 +35,7 @@ import {
   MassCancelResult,
   MassFiatSaleResultDto,
   MassFiatSaleDTO,
+  MassCancelFiatResult,
 } from './dto';
 import { CollectionsFilterPipe, ParseCollectionIdPipe } from './pipes';
 
@@ -183,5 +184,18 @@ export class AdminController {
   @UseGuards(AuthGuard, MainSaleSeedGuard)
   async massFiatSale(@Body(new ValidationPipe({ transform: true })) data: MassFiatSaleDTO): Promise<MassFiatSaleResultDto | unknown> {
     return await this.fiatSaleService.massFiatSale(data);
+  }
+
+  @Delete('//collections/mass-cancel-fiat')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Mass cancel fiat',
+    description: fs.readFileSync('docs/mass_cancel_fiat.md').toString(),
+  })
+  @ApiResponse({ status: HttpStatus.OK, type: MassCancelFiatResult })
+  @ApiBadRequestResponse({ type: BadRequestResponse })
+  @UseGuards(AuthGuard, MainSaleSeedGuard)
+  async massCancelFiat(): Promise<MassCancelFiatResult> {
+    return await this.fiatSaleService.massCancelFiat();
   }
 }
