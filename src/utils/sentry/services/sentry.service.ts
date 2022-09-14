@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import * as Sentry from '@sentry/node';
 import { Span } from '@sentry/tracing';
 import { CustomSamplingContext, Event, Scope, CaptureContext, TransactionContext } from '@sentry/types';
-import { getConfig } from '../../../config';
+import { appConfig } from '@app/config';
 
 @Injectable()
 export class SentryService {
-  private config = getConfig();
+  private config = appConfig;
 
   get currentHub() {
     return Sentry.getCurrentHub();

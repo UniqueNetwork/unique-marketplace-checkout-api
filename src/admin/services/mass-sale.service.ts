@@ -1,44 +1,49 @@
 import '@polkadot/api-augment/polkadot';
-import { Injectable, BadRequestException, Inject, HttpStatus, Logger } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { BN } from '@polkadot/util';
-import { BnList } from '@polkadot/util/types';
 import { Keyring } from '@polkadot/api';
 import { Observable, Subscriber } from 'rxjs';
-import { Connection, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Interface } from 'ethers/lib/utils';
 
-import { MassFixPriceSaleDTO, MassFixPriceSaleResult, MassAuctionSaleDTO, MassAuctionSaleResult } from '../dto';
+import { MassAuctionSaleDTO, MassAuctionSaleResultDto, MassFixPriceSaleDTO, MassFixPriceSaleResultDto } from '../dto';
 import { CollectionsService } from './collections.service';
-import { MarketConfig } from '../../config/market-config';
-import { collectionIdToAddress, subToEth } from '../../utils/blockchain/web3';
-import { BlockchainBlock } from '../../entity/blockchain-block';
-import { DateHelper } from '../../utils/date-helper';
-import { AuctionCreationService } from '../../auction/services/auction-creation.service';
+import { MarketConfig } from '@app/config';
+import { BlockchainBlock } from '@app/entity/blockchain-block';
+import { DateHelper } from '@app/utils/date-helper';
+import { AuctionCreationService } from '@app/auction/services/auction-creation.service';
 import { PrepareMassSaleResult, TransferResult } from '../types';
-import { blockchainStaticFile } from '../../utils/blockchain/util';
 import { GAS_LIMIT } from '../constants';
-import { ProxyCollection } from '../../utils/blockchain';
-import { InjectUniqueAPI } from '../../blockchain';
+
+import { TokenService } from './tokens.service';
+import { HelperService } from '@app/helpers/helper.service';
+import { Web3Service } from '@app/uniquesdk/web3.service';
+import { InjectUniqueSDK } from '@app/uniquesdk';
+import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 @Injectable()
 export class MassSaleService {
   private readonly logger: Logger;
   private readonly blockchainBlockRepository: Repository<BlockchainBlock>;
+
   private readonly collectionContractInterface: Interface;
   private readonly marketContractInterface: Interface;
 
   constructor(
-    @Inject('DATABASE_CONNECTION') private connection: Connection,
-    @InjectUniqueAPI() private unique,
+    private connection: DataSource,
     @Inject('CONFIG') private config: MarketConfig,
+    private helper: HelperService,
+    private web3conn: Web3Service,
+    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
     private readonly collections: CollectionsService,
     private readonly auctionCreationService: AuctionCreationService,
+    private readonly tokenService: TokenService,
   ) {
     this.logger = new Logger(MassSaleService.name);
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
 
-    const CollectionABI = JSON.parse(blockchainStaticFile('nonFungibleAbi.json'));
-    const MarketABI = JSON.parse(blockchainStaticFile('MarketPlace.json')).abi;
+    const CollectionABI = JSON.parse(this.helper.marketABIStaticFile('nonFungibleAbi.json'));
+    const MarketABI = JSON.parse(this.helper.marketABIStaticFile('MarketPlace.json')).abi;
 
     this.collectionContractInterface = new Interface(CollectionABI);
     this.marketContractInterface = new Interface(MarketABI);
@@ -49,7 +54,9 @@ export class MassSaleService {
    * @param {MassFixPriceSaleDTO} data - mass fix price sale params
    * @return ({Promise<MassFixPriceSaleResult>})
    */
-  async massFixPriceSale(data: MassFixPriceSaleDTO): Promise<MassFixPriceSaleResult> {
+  async massFixPriceSale(data: MassFixPriceSaleDTO): Promise<unknown | MassFixPriceSaleResultDto> {
+    this.checkDataFixPrice(data);
+    this.checkoutMarketPlace();
     const { collectionId, price } = data;
     const { signer, tokenIds } = await this.prepareMassSale(collectionId);
 
@@ -57,20 +64,20 @@ export class MassSaleService {
 
     if (tokensCount === 0) throw new BadRequestException('No tokens for sale');
 
-    const collectionContractAddress = collectionIdToAddress(collectionId);
+    const collectionContractAddress = this.web3conn.collectionIdToAddress(collectionId);
     const marketContractAddress = this.config.blockchain.unique.contractAddress;
     if (!marketContractAddress) throw new BadRequestException('Market contract address not set');
 
     for (const tokenId of tokenIds) {
-      const transferTxHash = await this.unique.tx.unique
-        .transfer({ Ethereum: subToEth(signer.address) }, collectionId, tokenId, 1)
+      const transferTxHash = await this.uniqueProvider.sdk.api.tx.unique
+        .transfer({ Ethereum: this.web3conn.subToEth(signer.address) }, collectionId, tokenId, 1)
         .signAndSend(signer, { nonce: -1 });
 
       this.logger.debug(`massFixPriceSale: Token #${tokenId} transfer: ${transferTxHash.toHuman()}`);
 
-      const approveTxHash = await this.unique.tx.evm
+      const approveTxHash = await this.uniqueProvider.sdk.api.tx.evm
         .call(
-          subToEth(signer.address),
+          this.web3conn.subToEth(signer.address),
           collectionContractAddress,
           this.collectionContractInterface.encodeFunctionData('approve', [marketContractAddress, tokenId]),
           0,
@@ -84,11 +91,16 @@ export class MassSaleService {
 
       this.logger.debug(`massFixPriceSale: Token #${tokenId} approve: ${approveTxHash.toHuman()}`);
 
-      const askTxHash = await this.unique.tx.evm
+      const askTxHash = await this.uniqueProvider.sdk.api.tx.evm
         .call(
-          subToEth(signer.address),
+          this.web3conn.subToEth(signer.address),
           marketContractAddress,
-          this.marketContractInterface.encodeFunctionData('addAsk', [price, '0x0000000000000000000000000000000000000001', collectionContractAddress, tokenId]),
+          this.marketContractInterface.encodeFunctionData('addAsk', [
+            price,
+            '0x0000000000000000000000000000000000000001',
+            collectionContractAddress,
+            tokenId,
+          ]),
           0,
           GAS_LIMIT,
           await this.getGasPrice(),
@@ -111,11 +123,36 @@ export class MassSaleService {
   }
 
   /**
+   * Checkout data for fix price mass sale
+   * @param data
+   * @private
+   */
+  private checkDataFixPrice(data: MassFixPriceSaleDTO): void {
+    const reg = /^[0-9]*$/;
+    if (data.price.toString().match(reg) === null) throw new BadRequestException('Price must be a number');
+    if (Number(data.price) <= 0) throw new BadRequestException('The price cannot be negative');
+    if (!reg.test(String(data.collectionId))) throw new BadRequestException('Invalid collection id');
+    if (!reg.test(String(data.price))) throw new BadRequestException('Invalid price number');
+  }
+
+  /**
+   * Checkout data for mass auction sale
+   * @param data
+   * @private
+   */
+  private checkDataAuction(data: MassAuctionSaleDTO): void {
+    const reg = /^[0-9]*$/;
+    if (!reg.test(String(data.collectionId))) throw new BadRequestException('Invalid collection id');
+    if (Number(data.days) === 0 && Number(data.minutes) === 0) throw new BadRequestException('Days and minutes cannot be zero');
+  }
+
+  /**
    * Mass auction sale
    * @param {MassAuctionSaleDTO} data - mass auction sale params
    * @return ({Promise<MassAuctionSaleResult>})
    */
-  async massAuctionSale(data: MassAuctionSaleDTO): Promise<MassAuctionSaleResult> {
+  async massAuctionSale(data: MassAuctionSaleDTO): Promise<MassAuctionSaleResultDto> {
+    this.checkDataAuction(data);
     const { collectionId, startPrice, priceStep, days, minutes } = data;
     const { signer, tokenIds } = await this.prepareMassSale(collectionId);
 
@@ -147,17 +184,19 @@ export class MassSaleService {
       });
 
       for (const tokenId of tokenIds) {
-        await this.unique.tx.unique.transfer({ Substrate: auctionAddress }, collectionId, tokenId, 1).signAndSend(signer, { nonce: -1 }, async ({ status }) => {
-          if (status.isFinalized) {
-            const blockHash = status.asFinalized;
+        await this.uniqueProvider.sdk.api.tx.unique
+          .transfer({ Substrate: auctionAddress }, collectionId, tokenId, 1)
+          .signAndSend(signer, { nonce: -1 }, async ({ status }) => {
+            if (status.isFinalized) {
+              const blockHash = status.asFinalized;
 
-            const block = await this.unique.rpc.chain.getBlock(blockHash);
+              const block = await this.uniqueProvider.sdk.api.rpc.chain.getBlock(blockHash);
 
-            const blockNumber = block.block.header.number.toBigInt();
+              const blockNumber = block.block.header.number.toBigInt();
 
-            subscriber.next({ tokenId, blockNumber });
-          }
-        });
+              subscriber.next({ tokenId, blockNumber });
+            }
+          });
       }
     });
 
@@ -176,7 +215,7 @@ export class MassSaleService {
     for (const transfer of transfers) {
       const { blockNumber, tokenId } = transfer;
 
-      await this.auctionCreationService.createAskAndBroadcast({
+      await this.auctionCreationService.createAuctionBroadcast({
         blockNumber: blockNumber.toString(),
         collectionId: collectionId.toString(),
         tokenId: tokenId.toString(),
@@ -203,15 +242,12 @@ export class MassSaleService {
    */
   private async prepareMassSale(collectionId: number): Promise<PrepareMassSaleResult> {
     const enabledIds = await this.collections.getEnabledCollectionIds();
-    const proxyCollection = ProxyCollection.getInstance(this.unique);
 
     if (!enabledIds.includes(collectionId)) throw new BadRequestException(`Collection #${collectionId} not enabled`);
 
-    const collectionById = await proxyCollection.getById(collectionId);
+    const collectionById = await this.uniqueProvider.collectionsService.collectionById(collectionId);
 
-    const collectionInChain = collectionById.unwrapOr(null);
-
-    if (collectionInChain === null) throw new BadRequestException(`Collection #${collectionId} not found in chain`);
+    if (collectionById === null) throw new BadRequestException(`Collection #${collectionId} not found in chain`);
 
     const keyring = new Keyring({ type: 'sr25519' });
 
@@ -221,12 +257,9 @@ export class MassSaleService {
 
     const signer = keyring.addFromUri(mainSaleSeed);
 
-    const accountTokens: BnList = await this.unique.rpc.unique.accountTokens(collectionId, {
-      Substrate: signer.address,
-    });
+    const allowedTokens = await this.tokenService.getArrayAllowedTokens(+collectionById.id, signer.address);
 
-    const tokenIds = accountTokens.map((t) => t.toNumber()).sort((a, b) => a - b);
-
+    const tokenIds = allowedTokens.ownerAllowedList;
     return {
       tokenIds,
       signer,
@@ -238,8 +271,18 @@ export class MassSaleService {
    * @return ({Promise<number>})
    */
   private async getGasPrice(): Promise<number> {
-    const gasPrice: BN = await this.unique.rpc.eth.gasPrice();
+    const gasPrice: BN = await this.uniqueProvider.sdk.api.rpc.eth.gasPrice();
 
     return gasPrice.toNumber();
+  }
+
+  /**
+   * Проверяем есть ли main sale seed в конфигурации
+   * Проверяем тп марктеплейс в конфигурации
+   * @private
+   */
+  private checkoutMarketPlace() {
+    if (!this.config.mainSaleSeed) throw new BadRequestException('Main sale seed not set');
+    if (!this.config.marketType) throw new BadRequestException('Market place not set');
   }
 }

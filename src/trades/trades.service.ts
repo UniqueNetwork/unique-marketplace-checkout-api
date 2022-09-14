@@ -1,6 +1,5 @@
-import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { Connection, SelectQueryBuilder } from 'typeorm';
-
+import { BadRequestException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { DataSource, SelectQueryBuilder } from 'typeorm';
 import { nullOrWhitespace } from '../utils/string/null-or-white-space';
 import { PaginationRequest } from '../utils/pagination/pagination-request';
 import { PaginationResult, PaginationResultDto } from '../utils/pagination/pagination-result';
@@ -9,17 +8,19 @@ import { SortingOrder } from '../utils/sorting/sorting-order';
 import { TradeSortingRequest } from '../utils/sorting/sorting-request';
 import { paginate } from '../utils/pagination/paginate';
 import { MarketTradeDto, TradesFilter } from './dto';
-import { MarketTrade, SearchIndex } from '../entity';
+import { AuctionBidEntity, MarketTrade, OffersEntity, SearchIndex } from '../entity';
 import { IMarketTrade } from './interfaces';
 import { InjectSentry, SentryService } from '../utils/sentry';
+import { SellingMethod } from '../types';
+import { uuidValidateV4 } from '../utils/uuid';
 
 @Injectable()
 export class TradesService {
-  private offerSortingColumns = ['Price', 'TokenId', 'CollectionId'];
+  private offerSortingColumns = ['Price', 'TokenId', 'CollectionId', 'CreationDate', 'Status', 'originPrice'];
   private sortingColumns = [...this.offerSortingColumns, 'TradeDate'];
   private logger: Logger;
 
-  constructor(@Inject('DATABASE_CONNECTION') private connection: Connection, @InjectSentry() private readonly sentryService: SentryService) {
+  constructor(private connection: DataSource, @InjectSentry() private readonly sentryService: SentryService) {
     this.logger = new Logger(TradesService.name);
   }
 
@@ -50,6 +51,7 @@ export class TradesService {
       tradesQuery = this.filterByAccountId(tradesQuery, accountId);
       tradesQuery = this.filterBySearchText(tradesQuery, tradesFilter.searchText);
       tradesQuery = this.filterByTraits(tradesQuery, tradesFilter.traits, tradesFilter.collectionId);
+      tradesQuery = this.filterByStatus(tradesQuery, tradesFilter.status);
       tradesQuery = this.applySort(tradesQuery, sort);
 
       paginationResult = await paginate(tradesQuery, paginationRequest);
@@ -101,6 +103,9 @@ export class TradesService {
       if (column === 'tokenid' || column === 'TokenId') {
         column = 'token_id';
       }
+      if (column === 'creationdate' || column === 'CreationDate') {
+        column = 'ask_created_at';
+      }
       if (column === 'tradedate' || column === 'TradeDate') {
         column = 'buy_created_at';
       }
@@ -108,7 +113,11 @@ export class TradesService {
         column = 'collection_id';
       }
       if (column === 'Price') {
-        column = 'price';
+        column = 'originPrice';
+      }
+
+      if (column === 'Status') {
+        column = 'status';
       }
 
       if (column === null || column === undefined) continue;
@@ -121,8 +130,7 @@ export class TradesService {
 
     let first = true;
     for (const param of params) {
-      const table = this.offerSortingColumns.indexOf(param.column) > -1 ? 'trade' : 'trade';
-      query = query[first ? 'orderBy' : 'addOrderBy'](`${table}.${param.column}`, param.order === SortingOrder.Asc ? 'ASC' : 'DESC');
+      query = query[first ? 'orderBy' : 'addOrderBy'](`trade.${param.column}`, param.order === SortingOrder.Asc ? 'ASC' : 'DESC');
       first = false;
     }
 
@@ -137,7 +145,10 @@ export class TradesService {
    * @see TradesService.get
    * @return ({SelectQueryBuilder<IMarketTrade>})
    */
-  private filterByCollectionIds(query: SelectQueryBuilder<IMarketTrade>, collectionIds: number[] | undefined): SelectQueryBuilder<IMarketTrade> {
+  private filterByCollectionIds(
+    query: SelectQueryBuilder<IMarketTrade>,
+    collectionIds: number[] | undefined,
+  ): SelectQueryBuilder<IMarketTrade> {
     if (collectionIds == null || collectionIds.length <= 0) {
       return query;
     }
@@ -180,6 +191,12 @@ export class TradesService {
         'search_index',
         'trade.network = search_index.network and trade.collection_id = search_index.collection_id and trade.token_id = search_index.token_id',
       )
+      .leftJoinAndMapOne(
+        'trade.offers',
+        OffersEntity,
+        'offers',
+        'trade.block_number_ask = offers.block_number_ask and trade.block_number_buy = offers.block_number_buy and trade.token_id = offers.token_id and  trade.collection_id = offers.collection_id',
+      )
       .leftJoinAndMapMany(
         'trade.search_filter',
         (subQuery) => {
@@ -209,11 +226,18 @@ export class TradesService {
         `search_filter.traits ILIKE CONCAT('%', cast(:searchText as text), '%') and search_filter.key not in ('description', 'collectionCover', 'image')`,
         { searchText: text },
       );
+      if (Number(text + 0)) {
+        query.orWhere(`trade.token_id = :tokenId`, { tokenId: Number(text) });
+      }
     }
     return query;
   }
 
-  private filterByTraits(query: SelectQueryBuilder<IMarketTrade>, traits?: string[], collectionId?: number[]): SelectQueryBuilder<IMarketTrade> {
+  private filterByTraits(
+    query: SelectQueryBuilder<IMarketTrade>,
+    traits?: string[],
+    collectionId?: number[],
+  ): SelectQueryBuilder<IMarketTrade> {
     if ((traits ?? []).length <= 0) {
       return query;
     } else {
@@ -228,5 +252,26 @@ export class TradesService {
         return query;
       }
     }
+  }
+
+  public async getByAuction(auctionId: string): Promise<any> {
+    if (!uuidValidateV4(auctionId)) {
+      throw new BadRequestException('Invalid format auctionId. Please set auctionId UUID format');
+    }
+    const auction = await this.connection.manager
+      .createQueryBuilder(OffersEntity, 'auction')
+      .leftJoinAndMapMany('auction.bids', AuctionBidEntity, 'bids', 'bids.auction_id = auction.id')
+      .where(`auction.id = :auctionId`, { auctionId });
+
+    return auction.getMany();
+  }
+
+  private filterByStatus(query: SelectQueryBuilder<IMarketTrade>, method: SellingMethod | undefined): SelectQueryBuilder<IMarketTrade> {
+    if (nullOrWhitespace(method)) {
+      return query;
+    }
+    return query.andWhere('trade."method" = :method', {
+      method,
+    });
   }
 }

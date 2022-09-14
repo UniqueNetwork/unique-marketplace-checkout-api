@@ -13,7 +13,7 @@ import {
 } from '@nestjs/swagger';
 import * as fs from 'fs';
 
-import { CollectionsService, TokenService, MassSaleService, AdminService, MassCancelingService } from './services';
+import { CollectionsService, TokenService, MassSaleService, AdminService, MassCancelingService, FiatSaleService } from './services';
 import { AuthGuard, MainSaleSeedGuard, LoginGuard } from './guards';
 import {
   AddTokensDto,
@@ -22,9 +22,9 @@ import {
   EnableCollectionDTO,
   EnableCollectionResult,
   ListCollectionResult,
-  MassAuctionSaleResult,
+  MassAuctionSaleResultDto,
   MassFixPriceSaleDTO,
-  MassFixPriceSaleResult,
+  MassFixPriceSaleResultDto,
   ResponseAdminDto,
   ResponseAdminForbiddenDto,
   ResponseAdminUnauthorizedDto,
@@ -33,6 +33,9 @@ import {
   BadRequestResponse,
   NotFoundResponse,
   MassCancelResult,
+  MassFiatSaleDTO,
+  MassFiatSaleResultDto,
+  MassCancelFiatResult,
 } from './dto';
 import { CollectionsFilterPipe, ParseCollectionIdPipe } from './pipes';
 
@@ -54,6 +57,7 @@ export class AdminController {
     private readonly tokenService: TokenService,
     private readonly massSaleService: MassSaleService,
     private readonly massCancelingService: MassCancelingService,
+    private readonly fiatSaleService: FiatSaleService,
   ) {}
 
   @Post('/login')
@@ -134,10 +138,12 @@ export class AdminController {
     summary: 'Mass fix price sale',
     description: fs.readFileSync('docs/mass_fixprice_sale.md').toString(),
   })
-  @ApiResponse({ status: HttpStatus.OK, type: MassFixPriceSaleResult })
+  @ApiResponse({ status: HttpStatus.OK, type: MassFixPriceSaleResultDto })
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @UseGuards(AuthGuard, MainSaleSeedGuard)
-  async massFixPriceSale(@Body(new ValidationPipe({ transform: true })) data: MassFixPriceSaleDTO): Promise<MassFixPriceSaleResult> {
+  async massFixPriceSale(
+    @Body(new ValidationPipe({ transform: true })) data: MassFixPriceSaleDTO,
+  ): Promise<MassFixPriceSaleResultDto | unknown> {
     return await this.massSaleService.massFixPriceSale(data);
   }
 
@@ -147,10 +153,10 @@ export class AdminController {
     summary: 'Mass auction sale',
     description: fs.readFileSync('docs/mass_auction_sale.md').toString(),
   })
-  @ApiResponse({ status: HttpStatus.OK, type: MassAuctionSaleResult })
+  @ApiResponse({ status: HttpStatus.OK, type: MassAuctionSaleResultDto })
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @UseGuards(AuthGuard, MainSaleSeedGuard)
-  async massAuctionSale(@Body(new ValidationPipe({ transform: true })) data: MassAuctionSaleDTO): Promise<MassAuctionSaleResult> {
+  async massAuctionSale(@Body(new ValidationPipe({ transform: true })) data: MassAuctionSaleDTO): Promise<MassAuctionSaleResultDto> {
     return await this.massSaleService.massAuctionSale(data);
   }
 
@@ -165,5 +171,31 @@ export class AdminController {
   @UseGuards(AuthGuard, MainSaleSeedGuard)
   async massCancel(): Promise<MassCancelResult> {
     return await this.massCancelingService.massCancel();
+  }
+
+  @Post('/collections/fiat')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Fiat mass price sale',
+    description: fs.readFileSync('docs/fiat_sale.md').toString(),
+  })
+  @ApiResponse({ status: HttpStatus.OK, type: MassFiatSaleResultDto })
+  @ApiBadRequestResponse({ type: BadRequestResponse })
+  @UseGuards(AuthGuard, MainSaleSeedGuard)
+  async massFiatSale(@Body(new ValidationPipe({ transform: true })) data: MassFiatSaleDTO): Promise<MassFiatSaleResultDto | unknown> {
+    return await this.fiatSaleService.massFiatSale(data);
+  }
+
+  @Delete('/mass-cancel-fiat')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Mass cancel fiat',
+    description: fs.readFileSync('docs/mass_cancel_fiat.md').toString(),
+  })
+  @ApiResponse({ status: HttpStatus.OK, type: MassCancelFiatResult })
+  @ApiBadRequestResponse({ type: BadRequestResponse })
+  @UseGuards(AuthGuard, MainSaleSeedGuard)
+  async massCancelFiat(): Promise<MassCancelFiatResult> {
+    return await this.fiatSaleService.massCancelFiat();
   }
 }

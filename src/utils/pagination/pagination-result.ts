@@ -5,6 +5,8 @@ export interface PaginationResult<T> {
   itemsCount: number;
   page: number;
   pageSize: number;
+  attributes?: Array<any>;
+  attributesCount?: Array<any>;
 }
 
 export class PaginationResultDto<T> implements PaginationResult<T> {
@@ -25,4 +27,6 @@ export class PaginationResultDto<T> implements PaginationResult<T> {
   itemsCount: number;
   page: number;
   pageSize: number;
+  attributes?: Array<any>;
+  attributesCount?: Array<any>;
 }

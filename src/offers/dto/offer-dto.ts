@@ -1,21 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ContractAsk } from '../../entity';
-import { Auction, AuctionStatus, Bid, BidStatus, TokenDescription } from '../../auction/types';
+import { OffersEntity } from '../../entity';
+import { AuctionStatus, Bid, BidStatus, TokenDescription } from '../../types';
 import { Exclude, Expose, plainToInstance, Type } from 'class-transformer';
+import { AuctionOffer } from '../../types/auction';
 
-class AuctionDto implements Auction {
-  @Exclude() id: string;
+export class AuctionDto implements AuctionOffer {
+  @Exclude() @ApiProperty({ example: 'afb625bf-d9b0-4f41-98d0-ae88814744f9' }) id: string;
   @Exclude() createdAt: Date;
   @Exclude() updatedAt: Date;
 
-  @Expose() priceStep: string;
-  @Expose() startPrice: string;
-  @Expose() status: AuctionStatus;
-  @Expose() stopAt: Date;
+  @Expose() @ApiProperty({ example: '10' }) priceStep: string;
+  @Expose() @ApiProperty({ example: '100' }) startPrice: string;
+  @Expose() @ApiProperty({ example: 'active' }) status: AuctionStatus;
+  @Expose() @ApiProperty({ example: '2022-06-24T14:32:00.833Z' }) stopAt: Date;
 
   @Expose()
   @Type(() => BidDto)
-  bids: BidDto[];
+  bids?: BidDto[];
 }
 
 class BidDto implements Bid {
@@ -32,34 +33,54 @@ class BidDto implements Bid {
 }
 
 export class TokenDescriptionDto {
-  @Expose() collectionName: string;
+  @Expose() @ApiProperty({ example: 'Test' }) collectionName: string;
   @Expose() image: string;
-  @Expose() prefix: string;
-  @Expose() description: string;
+  @Expose() video: string;
+  @Expose() @ApiProperty({ example: 'TEST' }) prefix: string;
+  @Expose() @ApiProperty({ example: 'Test collection' }) description: string;
   @Expose() collectionCover: string;
+  @Expose() @ApiProperty({ example: '5CSxpZepJj5dxkSBEDnN23pgg6B5X6VFRJ2kyubhb5Svstuu' }) owner: string;
+  @Expose() collectionId: number;
+  @Expose() @ApiProperty({ example: '1' }) tokenId: string;
   @Expose() attributes: Array<TokenDescription>;
+  @Expose() nestingChildTokens: Array<any>;
 }
 
-export class OfferContractAskDto {
-  @ApiProperty({ description: 'Item ID' })
-  @Expose()
-  id: number;
+export class CollectionDescriptionDto {
+  @Expose() @ApiProperty({ example: 'NFT' }) mode: string;
+  @Expose() @ApiProperty({ example: 'Test' }) name: string;
+  @Expose() @ApiProperty({ example: 'Test collection' }) description: string;
+  @Expose() @ApiProperty({ example: 'NFT' }) tokenPrefix: string;
+  @Expose() id: number;
+  @Expose() owner: string;
+  @Expose() schema: any;
+}
 
-  @ApiProperty({ description: 'Collection ID' })
+export class OfferEntityDto {
+  @ApiProperty({ description: 'Collection ID', example: 16 })
   @Expose()
   collectionId: number;
-  @ApiProperty({ description: 'Token ID' })
+  @ApiProperty({ description: 'Token ID', example: 4 })
   @Expose()
   tokenId: number;
-  @ApiProperty({ description: 'Price' })
+  @ApiProperty({ description: 'Price', example: '100' })
   @Expose()
   price: string;
-  @ApiProperty({ description: 'Contract ask currency' })
+  @ApiProperty({ description: 'Contract ask currency', example: 0 })
   @Expose()
   quoteId: number;
-  @ApiProperty({ description: 'Contract ask from' })
+  @ApiProperty({ description: 'Contract ask from', example: '5CfC8HRcV5Rc4jHFHmZsSjADCMYc7zoWbvxdoNG9qwEP7aUB' })
   @Expose()
   seller: string;
+
+  @ApiProperty({ description: 'Type offer' })
+  @Expose()
+  type: string;
+
+  @ApiProperty({ description: 'Status offer' })
+  @Expose()
+  status: string;
+
   @ApiProperty({ description: 'Date blockchain block created' })
   @Expose()
   creationDate: Date;
@@ -74,74 +95,31 @@ export class OfferContractAskDto {
   @Type(() => TokenDescriptionDto)
   tokenDescription: TokenDescriptionDto;
 
-  static fromContractAsk(contractAsk: ContractAsk & { isSellBlockchain?: boolean }): OfferContractAskDto {
+  @ApiProperty({ description: 'Collection description' })
+  @Expose()
+  @Type(() => CollectionDescriptionDto)
+  collectionDescription: CollectionDescriptionDto;
+
+  static fromOffersEntity(offersData: OffersEntity): OfferEntityDto {
     const plain: Record<string, any> = {
-      ...contractAsk,
-      collectionId: +contractAsk.collection_id,
-      tokenId: +contractAsk.token_id,
-      price: contractAsk.price.toString(),
-      quoteId: +contractAsk.currency,
-      seller: contractAsk.address_from,
-      creationDate: contractAsk.created_at,
-      // TODO contractAsk different objects for the offer and the list of offers
-      // at runtime
-      isSellBlockchain: typeof contractAsk.is_sell_blockchain == 'boolean' ? contractAsk.is_sell_blockchain : contractAsk.isSellBlockchain,
+      ...offersData,
+      collectionId: +offersData.collection_id,
+      tokenId: +offersData.token_id,
+      price: offersData.price.toString(),
+      quoteId: +offersData.currency,
+      seller: offersData.address_from,
+      creationDate: offersData.created_at,
+      status: offersData.status,
+      types: offersData.type,
     };
 
-    if (contractAsk?.auction?.bids?.length) {
-      contractAsk.auction.bids = contractAsk.auction.bids.sort((a, b) => {
+    if (offersData?.bids?.length) {
+      offersData.bids = offersData.bids.sort((a, b) => {
         return b.createdAt.getTime() - a.createdAt.getTime();
       });
     }
-    /**
-     * tokenDescription: {
-  attributes: [{ key, type, value }]// как есть остальное,
-  collectionName: string,
-  image: string // url
-  prefix: string
-}
-     */
-    /*     if (Array.isArray(contractAsk?.search_index)) {
-      plain.tokenDescription = contractAsk?.search_index.reduce((acc, item) => {
-        if (item.type === TypeAttributToken.Prefix) {
-          acc.prefix = item.items.pop();
-        }
-        //TODO: Переделать сборку токена
-        if (item.key === 'collectionName') {
-          acc.collectionName = item.items.pop();
-        }
 
-        if (item.key === 'description') {
-          acc.description = item.items.pop();
-        }
-
-        if (item.type === TypeAttributToken.ImageURL) {
-          const image = String(item.items.pop());
-          if ( image.search('ipfs.unique.network') !== -1) {
-            acc[`${item.key}`] = image;
-          } else {
-            if (image) {
-              acc[`${item.key}`] = `https://ipfs.unique.network/ipfs/${image}`;
-            } else {
-              acc[`${item.key}`] = null;
-            }
-          }
-        }
-
-        if ((item.type === TypeAttributToken.String || item.type === TypeAttributToken.Enum) && !['collectionName', 'description'].includes(item.key) ) {
-          acc.attributes.push({
-            key: item.key,
-            value: (item.items.length === 1) ? item.items.pop() : item.items,
-            type: item.type
-          })
-        }
-        return acc;
-      },{
-        attributes: []
-      })
-    } */
-
-    return plainToInstance<OfferContractAskDto, Record<string, any>>(OfferContractAskDto, plain, {
+    return plainToInstance<OfferEntityDto, Record<string, any>>(OfferEntityDto, plain, {
       excludeExtraneousValues: true,
     });
   }

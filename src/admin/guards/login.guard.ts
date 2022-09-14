@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, HttpStatus, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { MarketConfig } from '../../config/market-config';
+import { MarketConfig } from '@app/config';
 import { hexToU8a } from '@polkadot/util';
-import { signatureVerify } from '@polkadot/util-crypto';
+import { encodeAddress, signatureVerify } from '@polkadot/util-crypto';
 
 @Injectable()
 export class LoginGuard implements CanActivate {
@@ -13,7 +13,7 @@ export class LoginGuard implements CanActivate {
       const authHeader = req.headers.authorization;
       const bearer = authHeader.split(' ')[0];
       const signature = authHeader.split(' ')[1];
-      const signerAddress = req.query.account;
+      const signerAddress = encodeAddress(req.query.account);
       const payload = req.originalUrl.split('?')[0];
 
       if (bearer !== 'Bearer' || !signature || !signerAddress) {

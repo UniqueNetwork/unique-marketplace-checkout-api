@@ -3,10 +3,12 @@ import { addressToEvm, evmToAddress } from '@polkadot/util-crypto';
 import Web3 from 'web3';
 
 import { signTransaction } from './signTransaction';
-import { privateKey, blockchainStaticFile } from './util';
+import { HelperService } from '@app/helpers/helper.service';
 
-const contractHelpersAbi = JSON.parse(blockchainStaticFile('contractHelpersAbi.json'));
-const nonFungibleAbi = JSON.parse(blockchainStaticFile('nonFungibleAbi.json'));
+const helper = new HelperService();
+
+const contractHelpersAbi = JSON.parse(helper.marketABIStaticFile('contractHelpersAbi.json'));
+const nonFungibleAbi = JSON.parse(helper.marketABIStaticFile('nonFungibleAbi.json'));
 
 enum SponsoringMode {
   Disabled = 0,
@@ -63,7 +65,7 @@ const collectionIdToAddress = (address: number): string => {
 };
 
 const createEthAccountWithBalance = async (api: ApiPromise, web3) => {
-  const alice = privateKey('//Alice');
+  const alice = helper.privateKey('//Alice');
   const account = web3.eth.accounts.create();
   web3.eth.accounts.wallet.add(account.privateKey);
   await transferBalanceToEth(api, alice, account.address);
@@ -96,7 +98,14 @@ const createEvmCollection = (collectionId: number, from, web3) => {
   return new web3.eth.Contract(nonFungibleAbi, collectionIdToAddress(collectionId), { from });
 };
 
-const executeEthTxOnSub = async (web3, api: ApiPromise, admin, to: any, mkTx: (methods: any) => any, { value = 0 }: { value?: bigint | number } = {}) => {
+const executeEthTxOnSub = async (
+  web3,
+  api: ApiPromise,
+  admin,
+  to: any,
+  mkTx: (methods: any) => any,
+  { value = 0 }: { value?: bigint | number } = {},
+) => {
   const tx = api.tx.evm.call(
     subToEth(admin.address),
     to.options.address,

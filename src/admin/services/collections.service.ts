@@ -1,25 +1,33 @@
 import '@polkadot/api-augment/polkadot';
 import { HttpStatus, Inject, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { MarketConfig } from '../../config/market-config';
-import { Connection, Repository } from 'typeorm';
-import { CollectionImportType, CollectionStatus, DecodedCollection, ImportByIdResult } from '../types';
+import { MarketConfig } from '@app/config';
+import { DataSource, Repository } from 'typeorm';
+import { green, red, yellow } from 'cli-color';
+import { CollectionImportType, CollectionStatus, ImportByIdResult } from '../types';
 import { CollectionsFilter, DisableCollectionResult, EnableCollectionResult, ListCollectionResult } from '../dto';
-import { Collection } from '../../entity';
-import { ProxyCollection } from '../../utils/blockchain';
-import { InjectUniqueAPI } from '../../blockchain';
+import { Collection, OffersEntity } from '@app/entity';
+import { CollectionMode } from '@unique-nft/substrate-client/tokens';
+
+import { DecodedCollection } from '@app/types';
+import { CollectionService as CollectionDB } from '@app/database/collection.service';
+import { InjectUniqueSDK } from '@app/uniquesdk';
+import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 @Injectable()
 export class CollectionsService implements OnModuleInit {
   private readonly collectionsRepository: Repository<Collection>;
+  private readonly offersRepository: Repository<OffersEntity>;
   private readonly logger: Logger;
 
   constructor(
-    @Inject('DATABASE_CONNECTION') private connection: Connection,
-    @InjectUniqueAPI() private unique,
+    private connection: DataSource,
+    private collectionDB: CollectionDB,
+    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
     @Inject('CONFIG') private config: MarketConfig,
   ) {
     this.collectionsRepository = connection.getRepository(Collection);
-    this.logger = new Logger(CollectionsService.name);
+    this.offersRepository = connection.getRepository(OffersEntity);
+    this.logger = new Logger(CollectionsService.name, { timestamp: true });
   }
 
   /**
@@ -32,12 +40,12 @@ export class CollectionsService implements OnModuleInit {
 
     const collectionIds = [...new Set([...idsFromConfig, ...idsFromDatabase])];
 
-    this.logger.debug(`Import collection by ids ${collectionIds} ...`);
+    this.logger.log(`Import collection by ids ${yellow(collectionIds)} ...`);
 
     for (const collectionId of collectionIds) {
       const { message } = await this.importById(collectionId, CollectionImportType.Env);
 
-      this.logger.debug(message);
+      this.logger.log(message);
     }
   }
 
@@ -50,38 +58,46 @@ export class CollectionsService implements OnModuleInit {
    * @return ({Promise<ImportByIdResult>})
    */
   async importById(id: number, importType: CollectionImportType): Promise<ImportByIdResult> {
-    const proxyCollection = ProxyCollection.getInstance(this.unique);
-    const collection = await proxyCollection.getById(id);
-
+    const collectionNew = await this.uniqueProvider.collectionsService.collectionById(id);
     const decoded: DecodedCollection = {
-      owner: collection?.collection?.owner,
-      mode: collection?.collection?.mode,
-      tokenPrefix: collection?.tokenPrefix,
-      name: collection?.name,
-      description: collection?.description,
+      owner: collectionNew?.owner,
+      mode: collectionNew?.mode as CollectionMode,
+      tokenPrefix: collectionNew?.tokenPrefix,
+      name: collectionNew?.name,
+      importType: CollectionImportType.Api,
+      description: collectionNew?.description,
+      data: collectionNew,
     };
 
     const entity = this.collectionsRepository.create(decoded);
-
-    const existing = await this.findById(id);
+    const existing = await this.collectionDB.byId(id);
 
     if (existing) {
-      await this.collectionsRepository.save({ id: existing.id, ...entity });
+      try {
+        await this.collectionsRepository.save({ id: existing.id, ...entity });
+      } catch (e) {
+        this.logger.error(`Collection #${yellow(id)} ${red('updating data error')}`);
+        new Error('Error while updating collection');
+      }
 
       const collection = { ...existing, ...entity };
 
       return {
         collection,
-        message: `Collection #${id} already exists`,
+        message: `Collection #${yellow(id)} ${green('already exists')} `,
       };
     } else {
-      await this.collectionsRepository.save({ id, importType, ...entity });
-
+      try {
+        await this.collectionsRepository.save({ id, importType, ...entity });
+      } catch (e) {
+        this.logger.error(`Collection #${yellow(id)} ${red('updating data error')}`);
+        new Error('Error while updating collection');
+      }
       const collection = { ...existing, ...entity, importType };
 
       return {
         collection,
-        message: `Collection #${id} successfully created`,
+        message: `Collection #${yellow(id)} ${green('successfully created')} `,
       };
     }
   }
@@ -95,8 +111,9 @@ export class CollectionsService implements OnModuleInit {
     const { collection } = await this.importById(id, CollectionImportType.Api);
 
     await this.collectionsRepository.update(id, { status: CollectionStatus.Enabled });
-
-    const message = collection.status === CollectionStatus.Enabled ? `Collection #${id} has already enabled` : `Collection #${id} successfully enabled`;
+    await this.offersRepository.update({ collection_id: collection.id, status: 'removed_by_admin' }, { status: 'active' });
+    const message =
+      collection.status === CollectionStatus.Enabled ? `Collection #${id} has already enabled` : `Collection #${id} successfully enabled`;
 
     return {
       statusCode: HttpStatus.OK,
@@ -111,10 +128,10 @@ export class CollectionsService implements OnModuleInit {
    * @return ({Promise<DisableCollectionResult>})
    */
   async disableById(id: number): Promise<DisableCollectionResult> {
-    const collection = await this.collectionsRepository.findOne(id);
+    const collection = await this.collectionDB.byId(id);
 
     if (!collection) throw new NotFoundException(`Collection #${id} not found`);
-
+    await this.offersRepository.update({ collection_id: collection.id, status: 'active' }, { status: 'removed_by_admin' });
     const message =
       collection.status === CollectionStatus.Disabled
         ? `Collection #${collection.id} has already disabled`
@@ -136,20 +153,11 @@ export class CollectionsService implements OnModuleInit {
    * @return ({Promise<void>})
    */
   async updateAllowedTokens(id: number, tokens: string): Promise<void> {
-    const collection = await this.collectionsRepository.findOne(id);
+    const collection = await this.collectionDB.byId(id);
 
     if (!collection) throw new NotFoundException(`Collection #${id} not found`);
 
     await this.collectionsRepository.update(id, { allowedTokens: tokens });
-  }
-
-  /**
-   * Find collection by ID in database
-   * @param {Number} id - collection id
-   * @return ({Promise<Collection>})
-   */
-  async findById(id: number): Promise<Collection> {
-    return await this.collectionsRepository.findOne(id);
   }
 
   /**
@@ -164,7 +172,7 @@ export class CollectionsService implements OnModuleInit {
         message: '',
         data: await this.collectionsRepository.find({
           where: {
-            id: filter.collectionId,
+            id: filter.collectionId.toString(),
           },
         }),
       };

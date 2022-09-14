@@ -5,7 +5,7 @@ import { AuctionEntity, BidEntity, BlockchainBlock, ContractAsk } from '../../sr
 import { ASK_STATUS } from '../../src/escrow/constants';
 
 import { v4 as uuid } from 'uuid';
-import { AuctionStatus, Bid, BidStatus } from '../../src/auction/types';
+import { AuctionStatus, Bid, BidStatus } from '../../src/types';
 import { AuctionClosingService } from '../../src/auction/services/closing/auction-closing.service';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
 import { TxDecoder } from '../../src/auction/services/helpers/tx-decoder';
@@ -150,7 +150,9 @@ describe('Auction closing', () => {
     const connection = testEntities.app.get<Connection>('DATABASE_CONNECTION');
     const activeAuction = await connection.manager.findOne(AuctionEntity);
 
-    await request(testEntities.app.getHttpServer()).delete(`/auction/force_close_auction_for_test?collectionId=${collectionId}&tokenId=${tokenId}`).send();
+    await request(testEntities.app.getHttpServer())
+      .delete(`/auction/force_close_auction_for_test?collectionId=${collectionId}&tokenId=${tokenId}`)
+      .send();
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 

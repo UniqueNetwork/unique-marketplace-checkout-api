@@ -1,203 +1,224 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Connection, Repository } from 'typeorm';
-import { ApiPromise } from '@polkadot/api';
-import { MarketConfig } from '../../config/market-config';
-import { SearchIndex } from '../../entity';
+import { DataSource, Repository } from 'typeorm';
+import { MarketConfig } from '@app/config';
+import { Collection, SearchIndex } from '@app/entity';
 
 import { v4 as uuid } from 'uuid';
-import { CollectionToken, TokenInfo, TypeAttributToken } from '../types';
+import { CollectionToken, TokenInfo, TypeAttributToken } from '@app/types';
 
-import { ProxyCollection, ProxyToken } from '../../utils/blockchain';
-import { CollectionType } from '../../utils/blockchain/collection';
 import '@polkadot/api-augment/polkadot';
-import { InjectUniqueAPI } from '../../blockchain';
+import { CollectionInfoWithSchema, TokenByIdResult } from '@unique-nft/substrate-client/tokens';
+
+import { TokenService } from '@app/database/token.service';
+import { CollectionService } from '@app/database/collection.service';
+import { InjectUniqueSDK } from '@app/uniquesdk';
+import { SdkProvider } from '../../uniquesdk/sdk-provider';
+import { BundleType } from '@app/uniquesdk/sdk-tokens.service';
+
+type SerializeTokenType = {
+  items: TokenInfo[];
+  token: TokenByIdResult;
+  collection: CollectionInfoWithSchema;
+  serializeBunlde: Array<BundleType>;
+};
+
+type AddTokenType = {
+  collectionId: number;
+  tokenId: number;
+  owner: string;
+  data: string;
+};
 
 @Injectable()
 export class SearchIndexService {
   private network: string;
   private repository: Repository<SearchIndex>;
+  private readonly collectionsRepository: Repository<Collection>;
   private readonly logger = new Logger(SearchIndexService.name);
 
   private BLOCKED_SCHEMA_KEYS = ['ipfsJson'];
 
   constructor(
-    @Inject('DATABASE_CONNECTION') private connection: Connection,
-    @InjectUniqueAPI() private uniqueApi: ApiPromise,
+    private connection: DataSource,
+    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
+    private tokenDB: TokenService,
+    private collectionDB: CollectionService,
     @Inject('CONFIG') private config: MarketConfig,
   ) {
     this.network = this.config.blockchain.unique.network;
     this.repository = connection.getRepository(SearchIndex);
   }
-
-  async addSearchIndexIfNotExists(collectionToken: CollectionToken): Promise<void> {
-    const isExists = await this.getIfExists(collectionToken);
-    if (isExists) return;
-
+  /**
+   * If token is not exist in database, get token from unique api and save to database
+   * @param {CollectionToken} collectionToken token in collection
+   * @returns {Promise<SearchIndex[]>} Array of token info
+   */
+  async addSearchIndexIfNotExists(collectionToken: CollectionToken): Promise<SearchIndex[]> {
+    const dbIndex = await this.repository.find({
+      where: {
+        collection_id: String(collectionToken.collectionId),
+        token_id: String(collectionToken.tokenId),
+        network: collectionToken?.network || this.network,
+      },
+    });
+    if (dbIndex.length) return dbIndex;
     const searchIndexItems = await this.getTokenInfoItems(collectionToken);
-    await this.saveSearchIndex(collectionToken, searchIndexItems);
+    return this.saveSearchIndex(collectionToken, searchIndexItems);
   }
-
-  async getIfExists(collectionToken: CollectionToken): Promise<boolean> {
-    return await this.repository
-      .findOne({
-        where: {
-          collection_id: String(collectionToken.collectionId),
-          token_id: String(collectionToken.tokenId),
-          network: collectionToken?.network || this.network,
-        },
-      })
-      .then(Boolean);
+  /**
+   * Get value from attribute of token
+   * @param attribute
+   * @returns {string} Array of value
+   */
+  private getValueToken(attribute: any): Array<string> {
+    if (Array.isArray(attribute.value)) {
+      return attribute.value.map((item) => item._);
+    }
+    return attribute.value._ ? [attribute.value._] : [attribute.value];
   }
-
-  private reduceAcc(acc: TokenInfo[], item): TokenInfo[] {
-    if (item.type === 'Enum') {
-      const findIndex = acc.findIndex((i) => i.key === item.key);
-      if (findIndex !== -1) {
-        acc[findIndex].items = [...acc[findIndex].items, ...item.items];
-      } else {
-        acc.push({ ...item, items: [...item.items] });
-      }
+  /**
+   * Get location from attribute of token
+   * @param attribute
+   * @returns {string}
+   */
+  private getLocation(attribute: any): string | null {
+    if (Array.isArray(attribute.value)) {
+      return [
+        ...new Set(
+          attribute.value.map((i) =>
+            Object.keys(i)
+              .filter((i) => i !== '_')
+              .join(','),
+          ),
+        ),
+      ].join(',');
     } else {
-      acc.push({ ...item });
+      if (typeof attribute.value === 'string') {
+        return null;
+      } else {
+        return Object.keys(attribute.value)
+          .filter((i) => i !== '_')
+          .join(',');
+      }
     }
-    return acc;
   }
 
-  private getCollectionCover(collection: CollectionType): string {
-    if (collection?.collectionCover) {
-      return JSON.parse(collection?.collectionCover)?.collectionCover;
-    }
-    if (collection?.offchainSchema) {
-      return collection.offchainSchema.replace('{id}', '1');
-    }
-    return '';
+  /**
+   * Save token to database
+   * @param {TokenByIdResult} token token from sdk
+   * @returns {void}
+   */
+  async serializeTokenSave(token: TokenByIdResult, nested: Array<BundleType>): Promise<boolean> {
+    return this.tokenDB.save({
+      collectionId: token.collectionId,
+      tokenId: token.tokenId,
+      owner: token.owner,
+      data: token as any,
+      nested: nested as any,
+    });
   }
 
-  async getTokenInfoItems({ collectionId, tokenId }: CollectionToken): Promise<TokenInfo[]> {
-    const keywords = [];
-    const collectionInstance = ProxyCollection.getInstance(this.uniqueApi);
-    const tokenInstance = ProxyToken.getInstance(this.uniqueApi);
-    const collection = await collectionInstance.getById(collectionId);
-    const token = await tokenInstance.tokenIdCollection(tokenId, collection);
+  async prepareSearchIndex(tokenId: number, collectionId: number): Promise<any> {
+    const tokenData = await this.uniqueProvider.tokenWithCollection(tokenId, collectionId);
+    const source = new Set();
+    // Collection
+    source
+      .add({
+        locale: null,
+        items: [tokenData.collection.tokenPrefix],
+        key: 'prefix',
+        type: TypeAttributToken.Prefix,
+        is_trait: false,
+      })
+      .add({
+        locale: null,
+        items: [tokenData.collection.description],
+        key: 'description',
+        type: TypeAttributToken.String,
+        is_trait: false,
+      })
+      .add({
+        locale: null,
+        items: [tokenData.collection.name],
+        key: 'collectionName',
+        type: TypeAttributToken.String,
+        is_trait: false,
+      })
+      .add({
+        locale: null,
+        items: [tokenData.collection?.schema?.coverPicture?.fullUrl],
+        key: 'collectionCover',
+        type: TypeAttributToken.ImageURL,
+        is_trait: false,
+      });
 
-    keywords.push({
-      locale: null,
-      items: [this.getCollectionCover(collection)],
-      key: 'collectionCover',
-      type: TypeAttributToken.ImageURL,
-    });
-
-    keywords.push({
-      locale: null,
-      items: [collection.tokenPrefix],
-      key: 'prefix',
-      type: TypeAttributToken.Prefix,
-    });
-    keywords.push({
-      locale: null,
-      items: [collection.description],
-      key: 'description',
-      type: TypeAttributToken.String,
-    });
-    keywords.push({
-      locale: null,
-      items: [collection.name],
-      key: 'collectionName',
-      type: TypeAttributToken.String,
-    });
-    keywords.push({
+    // Token
+    source.add({
       locale: null,
       items: [`${tokenId}`],
       key: 'tokenId',
       type: TypeAttributToken.Number,
+      is_trait: false,
     });
 
-    if (collection.offchainSchema && collection.offchainSchema.length > 0) {
-      keywords.push({
+    if (tokenData.token?.image) {
+      source.add({
         locale: null,
+        items: [tokenData.token.image?.fullUrl],
         key: 'image',
-        items: [collection.offchainSchema.replace('{id}', String(tokenId))],
-        type: TypeAttributToken.ImageURL,
+        type: TypeAttributToken.ImageURL, //
+        is_trait: false,
       });
     }
 
-    if (token.constData) {
-      const tokenData = token.constData;
-      try {
-        for (const k of this.getKeywords(collection.schema.NFTMeta, tokenData.human)) {
-          keywords.push(k);
-        }
-      } catch (e) {
-        this.logger.debug(`Unable to get search indexes for token #${tokenId} from collection #${collectionId}`);
-      }
+    if (tokenData.token?.video) {
+      source.add({
+        locale: null,
+        items: [tokenData.token.video?.fullUrl],
+        key: 'video',
+        type: TypeAttributToken.VideoURL,
+      });
     }
-    return keywords.reduce(this.reduceAcc, []);
+
+    for (const [key, object] of Object.entries(tokenData.token?.attributes)) {
+      source.add({
+        locale: this.getLocation(object),
+        items: this.getValueToken(object),
+        key: object.name?._,
+        type: object.isEnum ? TypeAttributToken.Enum : TypeAttributToken.String,
+        is_trait: object.isEnum,
+      });
+    }
+
+    return {
+      items: [...source],
+      token: tokenData.token,
+      collection: tokenData.collection,
+      serializeBunlde: tokenData.serializeBunlde,
+    };
   }
 
-  *getKeywords(protoSchema, dataObj) {
-    for (const key of Object.keys(dataObj)) {
-      const resolvedType = protoSchema.fields[key].resolvedType;
-
-      if (this.BLOCKED_SCHEMA_KEYS.includes(key)) {
-        yield {
-          locale: null,
-          key: 'image',
-          items: [JSON.parse(dataObj[key]).ipfs],
-          type: TypeAttributToken.ImageURL,
-        };
-        continue;
-      }
-      if (resolvedType && resolvedType.constructor.name.toString() === 'Enum') {
-        if (Array.isArray(dataObj[key])) {
-          for (let i = 0; i < dataObj[key].length; i++) {
-            yield* this.convertEnumToString(dataObj[key][i], key, protoSchema);
-          }
-        } else {
-          yield* this.convertEnumToString(dataObj[key], key, protoSchema);
-        }
-      } else {
-        yield {
-          locale: null,
-          key,
-          items: [dataObj[key]],
-          type: TypeAttributToken.String,
-        };
-      }
-    }
+  async getTokenInfoItems({ collectionId, tokenId }: CollectionToken): Promise<SerializeTokenType> {
+    const source = await this.prepareSearchIndex(tokenId, collectionId);
+    return source;
   }
 
-  *convertEnumToString(value, key, protoSchema) {
-    try {
-      const typeFieldString = protoSchema.fields[key].resolvedType.constructor.name.toString();
-
-      const valueJsonComment = protoSchema.fields[key].resolvedType.options[value];
-      const translationObject = JSON.parse(valueJsonComment);
-      if (translationObject) {
-        yield* Object.keys(translationObject).map((k) => ({
-          locale: k,
-          is_trait: typeFieldString === 'Enum' ? true : false,
-          key,
-          items: [translationObject[k]],
-          type: typeFieldString === 'Enum' ? TypeAttributToken.Enum : TypeAttributToken.String,
-        }));
-      }
-    } catch (e) {
-      this.logger.error(`Error parsing schema when trying to convert enum to string`);
-    }
-  }
-
-  async saveSearchIndex(collectionToken: CollectionToken, items: TokenInfo[]): Promise<void> {
+  async saveSearchIndex(collectionToken: CollectionToken, source: SerializeTokenType): Promise<SearchIndex[]> {
+    const items = source.items;
     const total = items
       .filter(
         (i) =>
           [TypeAttributToken.Enum, TypeAttributToken.String].includes(i.type) &&
-          !['collectionCover', 'prefix', 'description', 'collectionName', 'tokenId', 'image'].includes(i.key),
+          !['collectionCover', 'prefix', 'description', 'collectionName', 'tokenId', 'image', 'video'].includes(i.key),
       )
       .reduce((acc, item) => {
         return acc + item.items.length;
       }, 0);
 
     const listItems = this.setListItems(items);
+
+    await this.serializeTokenSave(source.token, source.serializeBunlde);
+    await this.collectionDB.save(source.collection);
 
     const searchIndexItems: SearchIndex[] = items.map((item) =>
       this.repository.create({
@@ -213,10 +234,12 @@ export class SearchIndexService {
         count_item: this.setCountItem(item),
         total_items: total,
         list_items: listItems,
+        attributes: source.token as any,
+        nested: source.serializeBunlde as any,
       }),
     );
 
-    await this.repository.save(searchIndexItems);
+    return this.repository.save(searchIndexItems);
   }
 
   private setCountItem(item: TokenInfo): number {

@@ -1,10 +1,12 @@
 import { KeyringPair } from '@polkadot/keyring/types';
 import { Provider } from '@nestjs/common';
-import { MarketConfig } from '../../config/market-config';
-import { ApiPromise, Keyring } from '@polkadot/api';
+import { MarketConfig } from '@app/config';
+import { Keyring } from '@polkadot/api';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
-import { convertAddress } from '../../utils/blockchain/util';
-import { UNIQUE_API_PROVIDER, KUSAMA_API_PROVIDER } from '../../blockchain';
+import { KUSAMA_SDK_PROVIDER, UNIQUE_SDK_PROVIDER } from '@app/uniquesdk/constants/constants';
+import { Sdk } from '@unique-nft/substrate-client';
+import { HelperService } from '@app/helpers/helper.service';
+import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 export type AuctionCredentials = {
   keyring?: KeyringPair;
@@ -14,8 +16,8 @@ export type AuctionCredentials = {
 
 export const auctionCredentialsProvider: Provider = {
   provide: 'AUCTION_CREDENTIALS',
-  inject: ['CONFIG', UNIQUE_API_PROVIDER, KUSAMA_API_PROVIDER],
-  useFactory: async (config: MarketConfig, uniqueApi: ApiPromise, kusamaApi: ApiPromise) => {
+  inject: ['CONFIG', UNIQUE_SDK_PROVIDER, KUSAMA_SDK_PROVIDER],
+  useFactory: async (config: MarketConfig, uniqueApi: SdkProvider, kusamaApi: SdkProvider) => {
     const auctionCredentials: AuctionCredentials = {
       uniqueAddress: '',
       kusamaAddress: '',
@@ -24,10 +26,10 @@ export const auctionCredentialsProvider: Provider = {
     if (config.auction.seed) {
       await cryptoWaitReady();
       const keyring = new Keyring({ type: 'sr25519' }).addFromUri(config.auction.seed);
-
+      const helper = new HelperService();
       const [uniqueAddress, kusamaAddress] = await Promise.all([
-        convertAddress(keyring.address, uniqueApi.registry.chainSS58),
-        convertAddress(keyring.address, kusamaApi.registry.chainSS58),
+        helper.convertAddress(keyring.address, uniqueApi.sdk.api.registry.chainSS58),
+        helper.convertAddress(keyring.address, kusamaApi.sdk.api.registry.chainSS58),
       ]);
 
       auctionCredentials.keyring = keyring;

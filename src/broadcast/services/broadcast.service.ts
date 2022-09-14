@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BroadcastIOServer, BroadcastIOSocket, TokenIds, BroadcastIOEmitter } from '../types';
-import { OfferContractAskDto } from '../../offers/dto/offer-dto';
+import { bgGreen, bgRed, black, cyan } from 'cli-color';
+import { BroadcastIOEmitter, BroadcastIOServer, BroadcastIOSocket, TokenIds } from '../types';
+import { OfferEntityDto } from '../../offers/dto';
 
 @Injectable()
 export class BroadcastService {
-  private readonly logger = new Logger(BroadcastService.name);
-
+  private readonly logger = new Logger(BroadcastService.name, { timestamp: true });
+  private readonly emitColor = bgGreen(' ' + black('EMIT') + ' ');
+  private readonly emitColorRed = bgRed(' ' + black('EMIT') + ' ');
   private server: BroadcastIOServer | BroadcastIOEmitter = null;
 
   get isInitialized(): boolean {
@@ -24,7 +26,7 @@ export class BroadcastService {
 
     this.server = server;
 
-    this.logger.debug(`Initialised by ${isServer ? 'BroadcastIOServer' : 'BroadcastIOEmitter'}`);
+    this.logger.log(`Initialised by ${isServer ? 'BroadcastIOServer' : 'BroadcastIOEmitter'}`);
   }
 
   private static getAuctionRoomId({ collectionId, tokenId }: TokenIds): string {
@@ -32,58 +34,64 @@ export class BroadcastService {
   }
 
   private handleSocketConnection(socket: BroadcastIOSocket): void {
-    this.logger.debug(`Socket ${socket.id} connected`);
+    this.logger.log(cyan(`User ${socket.id} connected`));
 
     socket.on('subscribeToAuction', async (ids) => {
       const roomId = BroadcastService.getAuctionRoomId(ids);
-
-      this.logger.debug(`Socket ${socket.id} subscribeTo ${roomId}`);
-
+      this.logger.log(cyan(`User ${socket.id} subscribeTo ${roomId}`));
       await socket.join(roomId);
     });
 
     socket.on('unsubscribeFromAuction', async (ids) => {
       const roomId = BroadcastService.getAuctionRoomId(ids);
-
-      this.logger.debug(`Socket ${socket.id} unsubscribeFrom ${roomId}`);
-
+      this.logger.log(cyan(`User ${socket.id} unsubscribeFrom ${roomId}`));
       await socket.leave(roomId);
     });
 
     socket.on('disconnecting', (reason) => {
-      this.logger.debug(`Socket ${socket.id} disconnecting; Reason ${reason}`);
+      this.logger.warn(cyan(`User ${socket.id} disconnecting; Reason ${reason}`));
     });
 
     socket.on('disconnect', (reason) => {
-      this.logger.debug(`Socket ${socket.id} disconnected; Reason ${reason}`);
+      this.logger.warn(cyan(`User ${socket.id} disconnected; Reason ${reason}`));
     });
   }
 
-  sendAuctionStarted(offer: OfferContractAskDto): void {
-    this.logger.debug(`[Emit] auctionStarted - ${JSON.stringify(offer)}`);
+  sendAuctionStarted(offer: OfferEntityDto): void {
+    this.logger.log(`${this.emitColor} auctionStarted - ${JSON.stringify(offer)}`);
     this.server.emit('auctionStarted', offer);
   }
 
-  sendBidPlaced(offer: OfferContractAskDto): void {
+  sendBidPlaced(offer: OfferEntityDto): void {
     const roomId = BroadcastService.getAuctionRoomId(offer);
 
-    this.logger.debug(`[Emit] bidPlaced - ${roomId} - ${JSON.stringify(offer)}`);
+    this.logger.log(`${this.emitColor} bidPlaced - ${roomId} - ${JSON.stringify(offer)}`);
 
     this.server.in(roomId).emit('bidPlaced', offer);
   }
 
-  sendAuctionStopped(offer: OfferContractAskDto): void {
+  sendAuctionError(offer: OfferEntityDto, message: string): void {
+    const roomId = BroadcastService.getAuctionRoomId(offer);
+    this.logger.error(`${this.emitColorRed} errorMessage - ${roomId} - ${JSON.stringify(offer)}`);
+    const error = {
+      offer: JSON.stringify(offer),
+      message,
+    };
+    this.server.in(roomId).emit('errorMessage', `${error}`);
+  }
+
+  sendAuctionStopped(offer: OfferEntityDto): void {
     const roomId = BroadcastService.getAuctionRoomId(offer);
 
-    this.logger.debug(`[Emit] auctionStopped - ${roomId} - ${JSON.stringify(offer)}`);
+    this.logger.debug(`${this.emitColorRed} auctionStopped - ${roomId} - ${JSON.stringify(offer)}`);
 
     this.server.in(roomId).emit('auctionStopped', offer);
   }
 
-  sendAuctionClosed(offer: OfferContractAskDto): void {
+  sendAuctionClosed(offer: OfferEntityDto): void {
     const roomId = BroadcastService.getAuctionRoomId(offer);
 
-    this.logger.debug(`[Emit] auctionClosed - ${roomId} - ${JSON.stringify(offer)}`);
+    this.logger.debug(`${this.emitColorRed} auctionClosed - ${roomId} - ${JSON.stringify(offer)}`);
 
     this.server.in(roomId).emit('auctionClosed', offer);
   }

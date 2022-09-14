@@ -7,7 +7,8 @@ import { SortingParameter } from './sorting-parameter';
 export class OfferSortingRequest {
   @ApiProperty({
     items: { type: 'string', default: 'desc(CreationDate)' },
-    description: 'Possible values: asc(Price), desc(Price), asc(TokenId), desc(TokenId), asc(CreationDate), desc(CreationDate).',
+    description:
+      'Possible values: asc(Price), desc(Price), asc(TokenId), desc(TokenId), asc(CreationDate), desc(CreationDate), asc(Status), desc(Status)',
     required: false,
   })
   public sort?: SortingParameter[];
@@ -21,7 +22,7 @@ export class TradeSortingRequest {
   @ApiProperty({
     items: { type: 'string', default: 'desc(TradeDate)' },
     description:
-      'Possible values: asc(Price), desc(Price), asc(TokenId), desc(TokenId), asc(CollectionId), desc(CollectionId), asc(TradeDate), desc(TradeDate).',
+      'Possible values: asc(Price), desc(Price), asc(TokenId), desc(TokenId), asc(CollectionId), desc(CollectionId), asc(TradeDate), desc(TradeDate), asc(Status), desc(Status).',
     required: false,
   })
   public sort?: SortingParameter[];

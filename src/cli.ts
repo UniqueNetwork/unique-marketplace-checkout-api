@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { CommandModule, CommandService } from 'nestjs-command';
-import { CLIModule } from './cli.module';
+import { CLIModule } from './commands/cli.module';
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(CLIModule, {

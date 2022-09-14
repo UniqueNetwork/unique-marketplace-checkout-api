@@ -18,6 +18,7 @@ export class SearchIndexController {
 
   @Post('update')
   async updateSearchIndex(): Promise<void> {
+    console.log('updateSearchIndex');
     await this.searchIndex.updateSearchIndex();
   }
 }

@@ -1,9 +1,10 @@
-import { Controller, Get, HttpStatus, NotFoundException, Param, Query, UseInterceptors, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, HttpStatus, NotFoundException, Param, Query, UseInterceptors, ParseIntPipe, Post, Body } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import * as fs from 'fs';
 
 import { OffersService } from './offers.service';
-import { OfferTraits, OfferContractAskDto, OffersFilter, OfferAttributesDto, OfferAttributes } from './dto';
+import { PayOffersService } from './pay.service';
+import { OfferTraits, OfferEntityDto, OffersFilter, OfferAttributesDto, OfferAttributes, PayOfferDto, PayOfferResponseDto } from './dto';
 import { ParseOffersFilterPipe, ParseOffersAttributes } from './pipes';
 
 import { PaginationRequest } from '../utils/pagination/pagination-request';
@@ -15,25 +16,28 @@ import { TraceInterceptor } from '../utils/sentry';
 @Controller()
 @UseInterceptors(TraceInterceptor)
 export class OffersController {
-  constructor(private readonly offersService: OffersService) {}
+  constructor(private readonly offersService: OffersService, private readonly payOffersService: PayOffersService) {}
 
   @Get('offers')
   @ApiOperation({
     summary: 'Get offers, filters and seller',
     description: fs.readFileSync('docs/offers.md').toString(),
   })
-  @ApiResponse({ type: OfferContractAskDto, status: HttpStatus.OK })
+  @ApiResponse({ type: OfferEntityDto, status: HttpStatus.OK })
   get(
     @Query() pagination: PaginationRequest,
     @Query(ParseOffersFilterPipe) offersFilter: OffersFilter,
     @Query() sort: OfferSortingRequest,
-  ): Promise<PaginationResultDto<OfferContractAskDto>> {
+  ): Promise<PaginationResultDto<OfferEntityDto>> {
     return this.offersService.get(pagination, offersFilter, sort);
   }
 
   @Get('offer/:collectionId/:tokenId')
-  @ApiResponse({ type: OfferContractAskDto, status: HttpStatus.OK })
-  async getOneOffer(@Param('collectionId', ParseIntPipe) collectionId: number, @Param('tokenId', ParseIntPipe) tokenId: number): Promise<OfferContractAskDto> {
+  @ApiResponse({ type: OfferEntityDto, status: HttpStatus.OK })
+  async getOneOffer(
+    @Param('collectionId', ParseIntPipe) collectionId: number,
+    @Param('tokenId', ParseIntPipe) tokenId: number,
+  ): Promise<OfferEntityDto> {
     const offer = await this.offersService.getOne({ collectionId, tokenId });
 
     if (offer) {
@@ -63,5 +67,15 @@ export class OffersController {
   @ApiResponse({ status: HttpStatus.OK, type: OfferAttributes })
   async getAttributeCounts(@Query(ParseOffersAttributes) offerAttributes: OfferAttributesDto): Promise<Array<OfferAttributes>> {
     return this.offersService.getAttributesCounts(offerAttributes);
+  }
+
+  @ApiOperation({
+    summary: 'To pay offer to from card',
+    description: fs.readFileSync('docs/fiat_pay.md').toString(),
+  })
+  @ApiResponse({ type: PayOfferResponseDto, status: HttpStatus.CREATED })
+  @Post('pay')
+  async pay(@Body() input: PayOfferDto): Promise<PayOfferResponseDto> {
+    return this.payOffersService.payOffer(input);
   }
 }

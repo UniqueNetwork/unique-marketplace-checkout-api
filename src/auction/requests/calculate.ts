@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CalculateArgs, CalculationInfo } from '../types';
+import { CalculateArgs, CalculationInfo } from '../../types';
 import { IsInt, IsString } from 'class-validator';
 
 export class CalculationRequestDto implements CalculateArgs {
@@ -19,16 +19,16 @@ export class CalculationRequestDto implements CalculateArgs {
 type CalculationInfoResponse = Record<keyof CalculationInfo, string>;
 
 export class CalculationInfoResponseDto implements CalculationInfoResponse {
-  @ApiProperty()
+  @ApiProperty({ example: '100' })
   bidderPendingAmount: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: '0' })
   contractPendingPrice: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: '10' })
   priceStep: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: '100' })
   minBidderAmount: string;
 
   static fromCalculationInfo(calculationInfo: CalculationInfo): CalculationInfoResponseDto {

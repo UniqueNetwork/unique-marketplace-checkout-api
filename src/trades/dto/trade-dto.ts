@@ -1,8 +1,9 @@
-import { TypeAttributToken } from './../../auction/types/search';
+import { TypeAttributToken } from '../../types/search';
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type, plainToInstance } from 'class-transformer';
 import { MarketTrade } from '../../entity';
 import { TokenDescriptionDto } from '../../offers/dto';
+import { IsUUID } from 'class-validator';
 
 /** DTO for Trades */
 export class MarketTradeDto {
@@ -45,6 +46,16 @@ export class MarketTradeDto {
   @Expose()
   tradeDate: Date;
 
+  @ApiProperty({ description: 'Status' })
+  @Expose()
+  @Type(() => String)
+  status: string;
+
+  @ApiProperty({ description: 'Offer Id' })
+  @Expose()
+  @Type(() => String)
+  offerId: string;
+
   @ApiProperty({ description: 'Token description' })
   @Expose()
   @Type(() => TokenDescriptionDto)
@@ -56,10 +67,12 @@ export class MarketTradeDto {
       seller: trade.address_seller,
       collectionId: +trade.collection_id,
       creationDate: trade.ask_created_at,
-      price: trade.price,
+      price: trade.originPrice,
       quoteId: +trade.currency,
       tokenId: +trade.token_id,
       tradeDate: trade.buy_created_at,
+      status: trade.status,
+      offerId: trade?.offers?.id || null,
     };
 
     if (Array.isArray(trade?.search_index)) {
@@ -79,18 +92,25 @@ export class MarketTradeDto {
 
           if (item.type === TypeAttributToken.ImageURL) {
             const image = String(item.items.pop());
-            if (image.search('ipfs-gateway.usetech.com') !== -1) {
+            if (image.search('ipfs.uniquenetwork.dev') !== -1) {
               acc[`${item.key}`] = image;
             } else {
-              if (image) {
-                acc[`${item.key}`] = `http://ipfs-gateway.usetech.com/ipfs/${image}`;
+              if (image.search('https://') !== -1 && image.search('http://') !== 0) {
+                acc[`${item.key}`] = image;
               } else {
-                acc[`${item.key}`] = null;
+                if (image) {
+                  acc[`${item.key}`] = `https://ipfs.uniquenetwork.dev/ipfs/${image}`;
+                } else {
+                  acc[`${item.key}`] = null;
+                }
               }
             }
           }
 
-          if ((item.type === TypeAttributToken.String || item.type === TypeAttributToken.Enum) && !['collectionName', 'description'].includes(item.key)) {
+          if (
+            (item.type === TypeAttributToken.String || item.type === TypeAttributToken.Enum) &&
+            !['collectionName', 'description'].includes(item.key)
+          ) {
             acc.attributes.push({
               key: item.key,
               value: item.items.length === 1 ? item.items.pop() : item.items,
@@ -123,4 +143,10 @@ export class ResponseMarketTradeDto {
 
   @ApiProperty({ type: [MarketTradeDto], format: 'array' })
   items: [MarketTradeDto];
+}
+
+export class TradeAuctionDto {
+  @ApiProperty({})
+  @IsUUID('4')
+  auctionId: string;
 }

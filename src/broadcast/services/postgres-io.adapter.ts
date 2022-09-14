@@ -7,7 +7,7 @@ import { createAdapter } from '@socket.io/postgres-adapter';
 import { INestApplicationContext, Logger } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { Emitter } from '@socket.io/postgres-emitter';
-import { MarketConfig } from '../../config/market-config';
+import { MarketConfig } from '@app/config';
 import { BroadcastIOEmitter, BroadcastIOServer } from '../types';
 
 export class PostgresIoAdapter extends IoAdapter {
@@ -58,7 +58,7 @@ export class PostgresIoAdapter extends IoAdapter {
     const server = super.createIOServer(port, options);
 
     const pool = new Pool(this.poolConfig);
-    PostgresIoAdapter.checkTable(pool).then(() => this.logger.debug('table existence checked'));
+    PostgresIoAdapter.checkTable(pool).then(() => this.logger.log('table existence checked'));
 
     const postgresAdapter = createAdapter(pool, { errorHandler: this.logger.error });
 

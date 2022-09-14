@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, HttpStatus, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { MarketConfig } from '../../config/market-config';
+import { MarketConfig } from '@app/config';
 import { UNAUTHORIZED_ADMIN_ERROR_MESSAGE } from '../constants';
 
 @Injectable()

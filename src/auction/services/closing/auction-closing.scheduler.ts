@@ -1,5 +1,4 @@
-import { Inject, Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
-import { MarketConfig } from '../../../config/market-config';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { AuctionClosingService } from './auction-closing.service';
 import { clearIntervalAsync, setIntervalAsync, SetIntervalAsyncTimer } from 'set-interval-async/dynamic';
 import { InjectSentry, SentryService } from '../../../utils/sentry';
@@ -13,7 +12,6 @@ export class AuctionClosingScheduler implements OnApplicationShutdown {
 
   constructor(
     private readonly auctionClosingService: AuctionClosingService,
-    @Inject('CONFIG') private config: MarketConfig,
     @InjectSentry() private readonly sentryService: SentryService,
   ) {}
 

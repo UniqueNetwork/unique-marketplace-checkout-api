@@ -4,11 +4,10 @@ import { decodeAddress, encodeAddress } from '@polkadot/util-crypto';
 
 import { Escrow } from './base';
 import * as logging from '../utils/logging';
-import { TransactionStatus } from '../utils/blockchain';
-import { signTransaction } from '../utils/blockchain';
+import { signTransaction, TransactionStatus } from '../utils/blockchain';
 import { MONEY_TRANSFER_STATUS } from './constants';
-import * as kusama from '../utils/blockchain/kusama';
 import * as util from '../utils/blockchain/util';
+import { HelperService } from '@app/helpers/helper.service';
 
 const kusamaBlockMethods = {
   METHOD_TRANSFER_KEEP_ALIVE: 'transferKeepAlive',
@@ -17,13 +16,13 @@ const kusamaBlockMethods = {
 };
 
 export class KusamaEscrow extends Escrow {
+  helperService = new HelperService();
   SECTION_BALANCES = 'balances';
   adminAddress;
 
   async init() {
     this.initialized = true;
-    this.api = await kusama.connectApi(this.config('kusama.wsEndpoint'), this.configMode === Escrow.MODE_PROD);
-    this.admin = util.privateKey(this.config('escrowSeed'));
+    this.admin = this.helperService.privateKey(this.config('escrowSeed'));
     this.adminAddress = new Keyring({
       type: 'sr25519',
       ss58Format: this.config('kusama.ss58Format'),
@@ -148,7 +147,9 @@ export class KusamaEscrow extends Escrow {
     this.store.currentBlock = await this.getStartBlock();
     this.store.latestBlock = (await this.getLatestBlockNumber()) - this.config('kusama.waitBlocks');
     logging.log(
-      `Kusama escrow starting from block #${this.store.currentBlock} (mode: ${this.config('kusama.startFromBlock')}, maxBlock: ${this.store.latestBlock})`,
+      `Kusama escrow starting from block #${this.store.currentBlock} (mode: ${this.config('kusama.startFromBlock')}, maxBlock: ${
+        this.store.latestBlock
+      })`,
     );
     logging.log(`Kusama admin address: ${this.admin.address}`);
     logging.log(`Kusama admin address (kusama format): ${this.adminAddress}`);

@@ -59,3 +59,5 @@ export class SettingsDto {
   @ApiProperty({ required: false })
   auction?: Auction;
 }
+
+export class CheckSettingsService {}
