@@ -26,7 +26,7 @@ export class SdkCollectionService {
    * @returns {Promise<CollectionInfoWithSchema>}
    */
   async collectionById(id: number): Promise<CollectionInfoWithSchema> {
-    const collection = await this.sdk.collections.get_new({ collectionId: id });
+    const collection = await this.sdk.collections.get({ collectionId: id });
     return collection;
   }
 

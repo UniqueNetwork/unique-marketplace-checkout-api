@@ -22,7 +22,7 @@ const waitConnectionReady = async (sdk: Sdk, logger: Logger, wsEndpoint: string)
   sdk.api.on('error', () => logger.error(`error (${wsEndpoint})`));
 
   const [chain, version] = await Promise.all([sdk.api.rpc.system.chain(), sdk.api.rpc.system.version()]);
-  sdk.api.isReady;
+
   logger.log(`${chain} (${wsEndpoint}) version ${version} - ready`);
 
   return sdk;
@@ -35,7 +35,7 @@ export const UniqueSDKProvider: Provider<Promise<Sdk>> = {
     const logger = new Logger(UNIQUE_SDK_PROVIDER);
     const { wsEndpoint } = config.blockchain.unique;
     const sdk = await Sdk.create({ chainWsUrl: wsEndpoint });
-    return await waitConnectionReady(sdk, logger, wsEndpoint);
+    return waitConnectionReady(sdk, logger, wsEndpoint);
   },
   scope: Scope.DEFAULT,
 };
@@ -47,7 +47,7 @@ export const KusamaSDKProvider: Provider<Promise<Sdk>> = {
     const logger = new Logger(KUSAMA_SDK_PROVIDER);
     const { wsEndpoint } = config.blockchain.kusama;
     const sdk = await Sdk.create({ chainWsUrl: wsEndpoint });
-    return await waitConnectionReady(sdk, logger, wsEndpoint);
+    return waitConnectionReady(sdk, logger, wsEndpoint);
   },
   scope: Scope.DEFAULT,
 };

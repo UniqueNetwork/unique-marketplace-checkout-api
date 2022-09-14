@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Sdk } from '@unique-nft/substrate-client';
-import '@unique-nft/substrate-client/tokens';
+import { AccountTokensResult } from '@unique-nft/substrate-client/tokens';
 import { CollectionInfoWithSchema, TokenByIdResult } from '@unique-nft/substrate-client/tokens';
+
 import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants';
 import { SdkCollectionService } from './sdk-collections.service';
 
@@ -30,7 +31,7 @@ export class SdkTokensService {
    * @param collection
    */
   async tokenData(token: number, collection: number): Promise<any> {
-    return await this.sdk.tokens.get_new({ collectionId: collection, tokenId: token });
+    return await this.sdk.tokens.get({ collectionId: collection, tokenId: token });
   }
 
   async tokenWithCollection(
@@ -48,8 +49,8 @@ export class SdkTokensService {
     };
   }
 
-  async accountTokens(collection: number, address: string): Promise<any> {
-    return await this.sdk.tokens.getAccountTokens({
+  async accountTokens(collection: number, address: string): Promise<AccountTokensResult> {
+    return this.sdk.tokens.getAccountTokens({
       collectionId: collection,
       address: address,
     });
