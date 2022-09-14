@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Sdk } from '@unique-nft/substrate-client';
+
+import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 import { IObject, IStateQueries } from '@app/uniquesdk/sdk.types';
-import { SdkStateQueries } from '@unique-nft/substrate-client/state-queries';
 
 @Injectable()
-export class SdkStateService extends SdkStateQueries {
-  private readonly sdkExt: Sdk;
+export class SdkStateService {
+  public sdk: Sdk;
   public api;
   private logger: Logger;
 
@@ -13,17 +14,27 @@ export class SdkStateService extends SdkStateQueries {
    * @class SdkStateService
    * Queries for chain stage
    * @description A multifunctional class that allows you to receive data from storage on request.
-   * @param {Sdk} sdk - The sdk instance
+   *
+   * @param unique
+   * @param kusama
    */
-  constructor(sdk: Sdk) {
-    super(sdk);
-    this.sdkExt = sdk;
+  constructor(@InjectUniqueSDK() private readonly unique: Sdk, @InjectKusamaSDK() private readonly kusama: Sdk) {
     this.logger = new Logger('SdkStageService');
-    this.api = sdk.api;
+  }
+
+  /**
+   * Select chain
+   * @description This method allows you to select the chain you want to use.
+   * @param {String} network - 'unique' or 'kusama'
+   * @returns {void}
+   */
+  connect(network = 'unique'): void {
+    this.sdk = network === 'unique' ? this.unique : this.kusama;
+    this.api = this.sdk.api;
   }
 
   async collectionById(address: string): Promise<IStateQueries | IObject> {
-    return await this.sdkExt.stateQueries.execute({
+    return await this.sdk.stateQueries.execute({
       endpoint: 'query',
       module: 'common',
       method: 'collectionById',
@@ -36,7 +47,7 @@ export class SdkStateService extends SdkStateQueries {
    * @param address
    */
   async selfSponsoring(address: string): Promise<IStateQueries | IObject> {
-    return await this.sdkExt.stateQueries.execute({
+    return await this.sdk.stateQueries.execute({
       endpoint: 'query',
       module: 'evmContractHelpers',
       method: 'selfSponsoring',
@@ -49,7 +60,7 @@ export class SdkStateService extends SdkStateQueries {
    * @param address
    */
   async account(address: string): Promise<IStateQueries | IObject> {
-    return this.sdkExt.stateQueries.execute({
+    return this.sdk.stateQueries.execute({
       endpoint: 'query',
       module: 'system',
       method: 'account',
@@ -58,7 +69,7 @@ export class SdkStateService extends SdkStateQueries {
   }
 
   async sponsoringMode(address: string): Promise<IStateQueries | IObject> {
-    return this.sdkExt.stateQueries.execute({
+    return this.sdk.stateQueries.execute({
       endpoint: 'query',
       module: 'evmContractHelpers',
       method: 'sponsoringMode',
@@ -67,7 +78,7 @@ export class SdkStateService extends SdkStateQueries {
   }
 
   async allowlist(contractAddress: string, ethAddress: string): Promise<IStateQueries | IObject> {
-    return this.sdkExt.stateQueries.execute({
+    return this.sdk.stateQueries.execute({
       endpoint: 'query',
       module: 'evmContractHelpers',
       method: 'allowlist',
@@ -76,11 +87,17 @@ export class SdkStateService extends SdkStateQueries {
   }
 
   async tokenData(collectionId: number, tokenId: number): Promise<IStateQueries | IObject> {
-    return this.sdkExt.stateQueries.execute({
+    return this.sdk.stateQueries.execute({
       endpoint: 'query',
       module: 'nonfungible',
       method: 'tokenData',
       args: [collectionId, tokenId],
     });
+  }
+
+  disconnect() {
+    if (this.api.isReady) {
+      this.api.disconnect();
+    }
   }
 }

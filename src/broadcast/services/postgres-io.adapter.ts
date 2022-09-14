@@ -7,7 +7,7 @@ import { createAdapter } from '@socket.io/postgres-adapter';
 import { INestApplicationContext, Logger } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { Emitter } from '@socket.io/postgres-emitter';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '../../config/market-config';
 import { BroadcastIOEmitter, BroadcastIOServer } from '../types';
 
 export class PostgresIoAdapter extends IoAdapter {

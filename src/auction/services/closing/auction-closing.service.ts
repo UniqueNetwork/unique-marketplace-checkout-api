@@ -2,13 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DataSource, In, Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import { KeyringPair } from '@polkadot/keyring/types';
-import { KeyringProvider } from '@unique-nft/accounts/keyring';
-import { SignatureType } from '@unique-nft/accounts';
 
 import { BroadcastService } from '@app/broadcast/services/broadcast.service';
 import { BlockchainBlock, MarketTrade, MoneyTransfer, OffersEntity } from '@app/entity';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '@app/config/market-config';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
+import { SdkExtrinsicService, NetworkName, SdkTransferService } from '@app/uniquesdk';
 
 import { DatabaseHelper } from '../helpers/database-helper';
 import { AuctionStatus, BidStatus, SellingMethod } from '@app/types';
@@ -16,8 +15,7 @@ import { BidWithdrawService } from '../bid-withdraw.service';
 import { AuctionCancelingService } from '../auction-canceling.service';
 import { ASK_STATUS, MONEY_TRANSFER_STATUS, MONEY_TRANSFER_TYPES } from '@app/escrow/constants';
 import { OfferEntityDto } from '@app/offers/dto/offer-dto';
-import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../../uniquesdk/sdk-provider';
+import { AuctionCredentials } from '../../providers';
 
 @Injectable()
 export class AuctionClosingService {
@@ -34,15 +32,17 @@ export class AuctionClosingService {
     private broadcastService: BroadcastService,
     private bidWithdrawService: BidWithdrawService,
     private auctionCancellingService: AuctionCancelingService,
-    @InjectKusamaSDK() private readonly kusamaProvider: SdkProvider,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
+    private readonly sdkExtrinsicService: SdkExtrinsicService,
+    private readonly sdkTransferService: SdkTransferService,
     @Inject('CONFIG') private config: MarketConfig,
     @InjectSentry() private readonly sentryService: SentryService,
+    @Inject('AUCTION_CREDENTIALS') private auctionCredentials: AuctionCredentials,
   ) {
     this.offersRepository = connection.manager.getRepository(OffersEntity);
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
     this.tradeRepository = connection.manager.getRepository(MarketTrade);
     this.moneyTransferRepository = connection.getRepository(MoneyTransfer);
+    this.auctionKeyring = auctionCredentials.keyring;
   }
 
   /**
@@ -134,13 +134,13 @@ export class AuctionClosingService {
 
       await this.sendTokenToWinner(offer, winnerAddress);
 
-      const auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
+      const tx = await this.sdkTransferService.transferMany(this.auctionKeyring, address_from, ownerPrice, NetworkName.KUSAMA);
 
-      const isSucceed = await this.kusamaProvider.transferService
-        .moneyTransfer(auctionAccount, address_from, ownerPrice)
-        .then(({ succeed }) => {
+      const isSucceed = await this.sdkExtrinsicService
+        .submit(tx, NetworkName.KUSAMA)
+        .then(async ({ isSucceed }) => {
           this.logger.log(`transfer done`);
-          return succeed;
+          return isSucceed;
         })
         .catch(async (error) => {
           this.logger.warn(`transfer failed with ${error.toString()}`);
@@ -248,14 +248,15 @@ export class AuctionClosingService {
     try {
       const { collection_id, token_id } = offersEntity;
 
-      const auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
-
-      const { blockNumber } = await this.uniqueProvider.transferService.transferToken(
-        auctionAccount,
+      const tx = await this.sdkTransferService.transferOneToken(
+        this.auctionKeyring,
         winnerAddress,
-        parseInt(collection_id),
-        parseInt(token_id),
+        collection_id,
+        token_id,
+        NetworkName.UNIQUE,
       );
+
+      const { blockNumber } = await this.sdkExtrinsicService.submit(tx, NetworkName.UNIQUE);
 
       const block = this.blockchainBlockRepository.create({
         network: this.config.blockchain.unique.network,

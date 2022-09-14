@@ -2,35 +2,42 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException } fr
 import { DataSource, Not, Repository } from 'typeorm';
 import { SettingsDto } from './dto';
 
-import { MarketConfig } from '@app/config';
+import { seedToAddress, vec2str } from '@app/utils/blockchain/util';
+import { MarketConfig } from '@app/config/market-config';
 import { Collection } from '@app/entity';
 import { CollectionStatus } from '@app/admin/types/collection';
 import { SettingsEntity } from '@app/entity/settings';
+import { SdkStateService, SdkTokensService } from '@app/uniquesdk';
+import * as lib from '@app/utils/blockchain/web3';
+import { subToEthLowercase } from '@app/utils/blockchain/web3';
 import { cryptoWaitReady, decodeAddress, encodeAddress, evmToAddress } from '@polkadot/util-crypto';
 import Web3 from 'web3';
-import { HelperService } from '@app/helpers/helper.service';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../uniquesdk/sdk-provider';
 
 @Injectable()
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
   private readonly collectionsRepository: Repository<Collection>;
   private readonly settingsRepository: Repository<SettingsEntity>;
+  private api;
+  private web3conn;
   private web3;
   private ownerSeed: string;
 
   constructor(
     @Inject('CONFIG') private config: MarketConfig,
-    private web3conn: Web3Service,
     private connection: DataSource,
-    private helper: HelperService,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
-    @InjectKusamaSDK() private readonly kusamaProvider: SdkProvider,
+    private sdkStateUnique: SdkStateService,
+    private sdkStateKusama: SdkStateService,
+    private sdkTokens: SdkTokensService,
   ) {
+    this.sdkStateUnique.connect('unique');
+    this.sdkStateKusama.connect('kusama');
+    this.sdkTokens.connect('unique');
+    this.api = this.sdkStateUnique.api;
     this.collectionsRepository = connection.getRepository(Collection);
     this.settingsRepository = connection.getRepository(SettingsEntity);
+    this.web3conn = lib.connectWeb3(config.blockchain.unique.wsEndpoint);
+
     this.web3 = this.web3conn.web3;
     this.ownerSeed = config.blockchain.unique.contractOwnerSeed;
   }
@@ -49,7 +56,7 @@ export class SettingsService {
     // Main sale address
     if (this.config.mainSaleSeed && this.config.mainSaleSeed != '') {
       try {
-        mainSaleAddress = await this.helper.seedToAddress(mainSaleSeed);
+        mainSaleAddress = await seedToAddress(mainSaleSeed);
         administrators.push(mainSaleAddress);
       } catch (e) {
         this.logger.error('Main sale seed is invalid');
@@ -66,7 +73,7 @@ export class SettingsService {
       administrators: this.adminList,
       mainSaleSeedAddress: mainSaleAddress,
       blockchain: {
-        escrowAddress: await this.helper.seedToAddress(blockchain.escrowSeed),
+        escrowAddress: await seedToAddress(blockchain.escrowSeed),
         unique: {
           wsEndpoint: blockchain.unique.wsEndpoint,
           collectionIds,
@@ -82,8 +89,8 @@ export class SettingsService {
 
     if (auction.seed) {
       try {
-        let auctionAddress = await this.helper.seedToAddress(auction.seed);
-        auctionAddress = await this.convertSubstrateAddress(auctionAddress, this.uniqueProvider.sdk.api.registry.chainSS58);
+        let auctionAddress = await seedToAddress(auction.seed);
+        auctionAddress = await this.convertSubstrateAddress(auctionAddress, this.sdkStateUnique.api.registry.chainSS58);
 
         settings.auction = {
           commission: auction.commission,
@@ -183,32 +190,22 @@ export class SettingsService {
     if (!this.config.blockchain.escrowSeed) {
       escrowMap.set('Seed', 'Not set');
     } else {
-      const escrowAddress = await this.helper.seedToAddress(this.config.blockchain.escrowSeed);
+      const escrowAddress = await seedToAddress(this.config.blockchain.escrowSeed);
       escrowMap.set('Seed', escrowAddress);
       {
-        const balance = (await this.uniqueProvider.balanceService.getBalance(escrowAddress)).freeBalance.formatted;
-        escrowMap.set('Balance', `${await this.balanceString(balance)}`);
-      }
-
-      {
-        const balance = (await this.kusamaProvider.balanceService.getBalance(escrowAddress)).freeBalance.formatted;
-        escrowMap.set('Balance KSM', `${await this.balanceString(balance)}`);
+        const balance = (await this.api.query.system.account(escrowAddress)).data.free.toBigInt();
+        escrowMap.set('Balance', `${this.balanceString(balance)}`);
       }
     }
 
     if (!this.config.auction.seed) {
       auctionMap.set('Seed', 'Not set');
     } else {
-      const auctionAddress = await this.helper.seedToAddress(this.config.auction.seed);
+      const auctionAddress = await seedToAddress(this.config.auction.seed);
       auctionMap.set('Seed', auctionAddress);
       {
-        const balance = (await this.uniqueProvider.balanceService.getBalance(auctionAddress)).freeBalance.formatted;
-        auctionMap.set('Balance', `${await this.balanceString(balance)}`);
-      }
-
-      {
-        const balance = (await this.kusamaProvider.balanceService.getBalance(auctionAddress)).freeBalance.formatted;
-        auctionMap.set('Balance KSM', `${await this.balanceString(balance)}`);
+        const balance = (await this.api.query.system.account(auctionAddress)).data.free.toBigInt();
+        auctionMap.set('Balance', `${this.balanceString(balance)}`);
       }
     }
 
@@ -236,9 +233,9 @@ export class SettingsService {
     let validContract = false;
 
     if (this.config.blockchain.unique.contractAddress) {
-      let code;
+      let code = '';
       try {
-        code = await this.uniqueProvider.sdk.api.rpc.eth.getCode(this.config.blockchain.unique.contractAddress);
+        code = await this.sdkStateUnique.api.rpc.eth.getCode(this.config.blockchain.unique.contractAddress);
       } catch (e) {
         code = '';
       }
@@ -255,21 +252,21 @@ export class SettingsService {
       contractData.set('Address', address);
       contractData.set('Mirror', await this.addSubstrateMirror(this.config.blockchain.unique.contractAddress));
 
-      const balance = (await this.uniqueProvider.sdk.api.rpc.eth.getBalance(this.config.blockchain.unique.contractAddress)).toBigInt();
+      const balance = (await this.sdkStateUnique.api.rpc.eth.getBalance(this.config.blockchain.unique.contractAddress)).toBigInt();
       if (balance === 0n) {
         contractData.set('Balance', `Contract balance is zero, transactions will be failed via insufficient balance error`);
       } else {
-        contractData.set('Balance', `${await this.balanceString(balance)}`);
+        contractData.set('Balance', `${this.balanceString(balance)}`);
       }
-      const sponsoring = (await this.uniqueProvider.sdk.api.query.evmContractHelpers.selfSponsoring(address)).toJSON();
-      const sponsoringMode = <any>(await this.uniqueProvider.sdk.api.query.evmContractHelpers.sponsoringMode(address)).toJSON();
+      const sponsoring = (await this.sdkStateUnique.api.query.evmContractHelpers.selfSponsoring(address)).toJSON();
+      const sponsoringMode = (await this.sdkStateUnique.api.query.evmContractHelpers.sponsoringMode(address)).toJSON();
       const allowedModes = ['Generous', 'Allowlisted'];
       if (allowedModes.indexOf(sponsoringMode) === -1 && !sponsoring) {
         contractData.set('Self-sponsoring', `Contract self-sponsoring is not enabled. You should call setSponsoringMode first`);
       } else {
         contractData.set('Self-sponsoring', `Contract self-sponsoring is enabled`);
       }
-      const rateLimit = (await this.uniqueProvider.sdk.api.query.evmContractHelpers.sponsoringRateLimit(address)).toJSON() as number;
+      const rateLimit = (await this.sdkStateUnique.api.query.evmContractHelpers.sponsoringRateLimit(address)).toJSON() as number;
       if (rateLimit !== 0) {
         contractData.set('Rate limit', `Rate limit is not zero, users should wait ${rateLimit} blocks between calling sponsoring`);
       } else {
@@ -294,16 +291,16 @@ export class SettingsService {
    */
   async checkCollection(collectionId: string) {
     const collectionList = new Map();
-    const collection = (await this.uniqueProvider.stateService.collectionById(collectionId)).json;
+    const collection = (await this.sdkStateUnique.collectionById(collectionId)).json;
     if (collection === null) {
       collectionList.set('status', 'undefined');
       return collectionList;
     }
     collectionList.set('Collection', collectionId);
-    collectionList.set('Name', this.helper.vec2str(collection.name));
-    collectionList.set('Description', this.helper.vec2str(collection.description));
-    const collectionTokens = await this.uniqueProvider.sdk.collections.tokens({ collectionId: +collectionId });
-    collectionList.set('Tokens', collectionTokens.ids.length);
+    collectionList.set('Name', vec2str(collection.name));
+    collectionList.set('Description', vec2str(collection.description));
+    const collectionTokens = await this.sdkStateUnique.api.rpc.unique.collectionTokens(collectionId);
+    collectionList.set('Tokens', collectionTokens.length);
     let sponsorship = collection.sponsorship;
     if (typeof collection.sponsorship !== 'string') {
       sponsorship = {};
@@ -321,13 +318,12 @@ export class SettingsService {
       collectionList.set('Sponsorship Substrate', `${address}`);
 
       {
-        const allBalances = await this.uniqueProvider.balanceService.getBalance(address);
-        const balance = BigInt(allBalances.freeBalance.raw);
+        const balance = (await this.sdkStateUnique.api.query.system.account(address)).data.free.toBigInt();
 
         if (balance === 0n) {
           collectionList.set('Balance', `Sponsoring is confirmed. ${address} but balance is 0`);
         } else {
-          collectionList.set('Balance', `Sponsor has ${balance} on its substrate wallet`);
+          collectionList.set('Balance', `Sponsor has ${this.balanceString(balance)} on its substrate wallet`);
         }
       }
     } else {
@@ -344,8 +340,8 @@ export class SettingsService {
    * @param balance
    * @returns {string}
    */
-  private async balanceString(balance) {
-    return `${balance}`;
+  private balanceString(balance) {
+    return `${balance / lib.UNIQUE} coins (${balance})`;
   }
 
   /**
@@ -353,7 +349,7 @@ export class SettingsService {
    * @param eth
    */
   convertSubstrateToEthereum(eth: string): string {
-    return Web3.utils.toChecksumAddress(this.web3conn.subToEthLowercase(eth));
+    return Web3.utils.toChecksumAddress(subToEthLowercase(eth));
   }
 
   /**

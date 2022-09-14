@@ -1,20 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Sdk } from '@unique-nft/substrate-client';
 import '@unique-nft/substrate-client/tokens';
-import { NestedToken, AccountTokensResult } from '@unique-nft/substrate-client/tokens';
+import { CollectionInfoWithSchema, TokenByIdResult } from '@unique-nft/substrate-client/tokens';
+import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants';
+import { SdkCollectionService } from './sdk-collections.service';
 
-export type BundleType = {
-  collectionId: number;
-  tokenId: number;
-};
 @Injectable()
 export class SdkTokensService {
+  public sdk: Sdk;
   public api: any;
   private logger: Logger;
 
-  constructor(private sdk: Sdk) {
-    this.logger = new Logger('SdkTokensService');
-    this.api = sdk.api;
+  constructor(
+    @InjectUniqueSDK() private readonly unique: Sdk,
+    @InjectKusamaSDK() private readonly kusama: Sdk,
+    private readonly sdkCollections: SdkCollectionService,
+  ) {
+    this.logger = new Logger('SdkStageService');
+  }
+
+  connect(network = 'unique'): void {
+    this.sdk = network === 'unique' ? this.unique : this.kusama;
+    this.api = this.sdk.api;
   }
 
   /**
@@ -25,75 +32,32 @@ export class SdkTokensService {
   async tokenData(token: number, collection: number): Promise<any> {
     return await this.sdk.tokens.get_new({ collectionId: collection, tokenId: token });
   }
-  /**
-   * Check if token is bundle
-   * @param token
-   * @param collection
-   * @returns {Boolean}
-   */
-  async isBundle(token: number, collection: number): Promise<boolean> {
-    try {
-      return await this.sdk.tokens.isBundle({ collectionId: collection, tokenId: token });
-    } catch (error) {
-      this.logger.error(error);
-      throw new Error(error);
-    }
-  }
-  /**
-   * Get bundle
-   * @param token
-   * @param collection
-   * @returns {Promise<NestedToken>}
-   */
-  async getBundle(token: number, collection: number): Promise<NestedToken> {
-    try {
-      return await this.sdk.tokens.getBundle({ collectionId: collection, tokenId: token });
-    } catch (error) {
-      this.logger.error(error);
-      throw new Error(error);
-    }
+
+  async tokenWithCollection(
+    tokenId: number,
+    collectionId: number,
+  ): Promise<{
+    token: TokenByIdResult;
+    collection: CollectionInfoWithSchema;
+  }> {
+    const token = await this.tokenData(tokenId, collectionId);
+    const collection = await this.sdkCollections.collectionById(collectionId);
+    return {
+      token,
+      collection,
+    };
   }
 
-  async accountTokens(collection: number, address: string): Promise<AccountTokensResult> {
+  async accountTokens(collection: number, address: string): Promise<any> {
     return await this.sdk.tokens.getAccountTokens({
       collectionId: collection,
       address: address,
     });
   }
 
-  public serializeBunlde(bundle: NestedToken): Array<BundleType> {
-    function recurseBundle(bundle: NestedToken): Array<BundleType> {
-      if (bundle?.nestingChildTokens) {
-        if (Array.isArray(bundle.nestingChildTokens)) {
-          const items = [
-            {
-              collectionId: +bundle.collectionId,
-              tokenId: +bundle.tokenId,
-            },
-          ];
-          bundle.nestingChildTokens.forEach((child) => {
-            items.push(...recurseBundle(child));
-          });
-          return items;
-        } else {
-          return [
-            {
-              collectionId: +bundle.collectionId,
-              tokenId: +bundle.tokenId,
-            },
-            ...recurseBundle(bundle.nestingChildTokens),
-          ];
-        }
-      } else {
-        return [
-          {
-            collectionId: +bundle.collectionId,
-            tokenId: +bundle.tokenId,
-          },
-        ];
-      }
+  disconnect() {
+    if (this.api.isReady) {
+      this.api.disconnect();
     }
-
-    return [...new Set(recurseBundle(bundle))];
   }
 }

@@ -8,42 +8,41 @@ import { Interface } from 'ethers/lib/utils';
 
 import { MassAuctionSaleDTO, MassAuctionSaleResultDto, MassFixPriceSaleDTO, MassFixPriceSaleResultDto } from '../dto';
 import { CollectionsService } from './collections.service';
-import { MarketConfig } from '@app/config';
-import { BlockchainBlock } from '@app/entity/blockchain-block';
-import { DateHelper } from '@app/utils/date-helper';
-import { AuctionCreationService } from '@app/auction/services/auction-creation.service';
+import { MarketConfig } from '../../config/market-config';
+import { collectionIdToAddress, subToEth } from '../../utils/blockchain/web3';
+import { BlockchainBlock } from '../../entity/blockchain-block';
+import { DateHelper } from '../../utils/date-helper';
+import { AuctionCreationService } from '../../auction/services/auction-creation.service';
 import { PrepareMassSaleResult, TransferResult } from '../types';
+import { marketABIStaticFile } from '../../utils/blockchain/util';
 import { GAS_LIMIT } from '../constants';
-
+import { ProxyCollection } from '../../utils/blockchain';
 import { TokenService } from './tokens.service';
-import { HelperService } from '@app/helpers/helper.service';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
+import { Sdk } from '@unique-nft/substrate-client';
+import { InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 
 @Injectable()
 export class MassSaleService {
   private readonly logger: Logger;
   private readonly blockchainBlockRepository: Repository<BlockchainBlock>;
-
+  private unique: Sdk;
   private readonly collectionContractInterface: Interface;
   private readonly marketContractInterface: Interface;
 
   constructor(
     private connection: DataSource,
+    @InjectUniqueSDK() private sdk,
     @Inject('CONFIG') private config: MarketConfig,
-    private helper: HelperService,
-    private web3conn: Web3Service,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
     private readonly collections: CollectionsService,
     private readonly auctionCreationService: AuctionCreationService,
     private readonly tokenService: TokenService,
   ) {
     this.logger = new Logger(MassSaleService.name);
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
+    this.unique = this.sdk.api;
 
-    const CollectionABI = JSON.parse(this.helper.marketABIStaticFile('nonFungibleAbi.json'));
-    const MarketABI = JSON.parse(this.helper.marketABIStaticFile('MarketPlace.json')).abi;
+    const CollectionABI = JSON.parse(marketABIStaticFile('nonFungibleAbi.json'));
+    const MarketABI = JSON.parse(marketABIStaticFile('MarketPlace.json')).abi;
 
     this.collectionContractInterface = new Interface(CollectionABI);
     this.marketContractInterface = new Interface(MarketABI);
@@ -64,20 +63,20 @@ export class MassSaleService {
 
     if (tokensCount === 0) throw new BadRequestException('No tokens for sale');
 
-    const collectionContractAddress = this.web3conn.collectionIdToAddress(collectionId);
+    const collectionContractAddress = collectionIdToAddress(collectionId);
     const marketContractAddress = this.config.blockchain.unique.contractAddress;
     if (!marketContractAddress) throw new BadRequestException('Market contract address not set');
 
     for (const tokenId of tokenIds) {
-      const transferTxHash = await this.uniqueProvider.sdk.api.tx.unique
-        .transfer({ Ethereum: this.web3conn.subToEth(signer.address) }, collectionId, tokenId, 1)
+      const transferTxHash = await this.unique.api.tx.unique
+        .transfer({ Ethereum: subToEth(signer.address) }, collectionId, tokenId, 1)
         .signAndSend(signer, { nonce: -1 });
 
       this.logger.debug(`massFixPriceSale: Token #${tokenId} transfer: ${transferTxHash.toHuman()}`);
 
-      const approveTxHash = await this.uniqueProvider.sdk.api.tx.evm
+      const approveTxHash = await this.unique.api.tx.evm
         .call(
-          this.web3conn.subToEth(signer.address),
+          subToEth(signer.address),
           collectionContractAddress,
           this.collectionContractInterface.encodeFunctionData('approve', [marketContractAddress, tokenId]),
           0,
@@ -91,9 +90,9 @@ export class MassSaleService {
 
       this.logger.debug(`massFixPriceSale: Token #${tokenId} approve: ${approveTxHash.toHuman()}`);
 
-      const askTxHash = await this.uniqueProvider.sdk.api.tx.evm
+      const askTxHash = await this.unique.api.tx.evm
         .call(
-          this.web3conn.subToEth(signer.address),
+          subToEth(signer.address),
           marketContractAddress,
           this.marketContractInterface.encodeFunctionData('addAsk', [
             price,
@@ -184,13 +183,13 @@ export class MassSaleService {
       });
 
       for (const tokenId of tokenIds) {
-        await this.uniqueProvider.sdk.api.tx.unique
+        await this.unique.api.tx.unique
           .transfer({ Substrate: auctionAddress }, collectionId, tokenId, 1)
           .signAndSend(signer, { nonce: -1 }, async ({ status }) => {
             if (status.isFinalized) {
               const blockHash = status.asFinalized;
 
-              const block = await this.uniqueProvider.sdk.api.rpc.chain.getBlock(blockHash);
+              const block = await this.unique.api.rpc.chain.getBlock(blockHash);
 
               const blockNumber = block.block.header.number.toBigInt();
 
@@ -242,10 +241,11 @@ export class MassSaleService {
    */
   private async prepareMassSale(collectionId: number): Promise<PrepareMassSaleResult> {
     const enabledIds = await this.collections.getEnabledCollectionIds();
+    const proxyCollection = ProxyCollection.getInstance(this.unique.api);
 
     if (!enabledIds.includes(collectionId)) throw new BadRequestException(`Collection #${collectionId} not enabled`);
 
-    const collectionById = await this.uniqueProvider.collectionsService.collectionById(collectionId);
+    const collectionById = await proxyCollection.getById(collectionId);
 
     if (collectionById === null) throw new BadRequestException(`Collection #${collectionId} not found in chain`);
 
@@ -257,7 +257,7 @@ export class MassSaleService {
 
     const signer = keyring.addFromUri(mainSaleSeed);
 
-    const allowedTokens = await this.tokenService.getArrayAllowedTokens(+collectionById.id, signer.address);
+    const allowedTokens = await this.tokenService.getArrayAllowedTokens(+collectionById.collectionId, signer.address);
 
     const tokenIds = allowedTokens.ownerAllowedList;
     return {
@@ -271,7 +271,7 @@ export class MassSaleService {
    * @return ({Promise<number>})
    */
   private async getGasPrice(): Promise<number> {
-    const gasPrice: BN = await this.uniqueProvider.sdk.api.rpc.eth.gasPrice();
+    const gasPrice: BN = await this.unique.api.rpc.eth.gasPrice();
 
     return gasPrice.toNumber();
   }

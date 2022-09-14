@@ -4,4 +4,3 @@ export * from './mass-sale.service';
 export * from './admin.service';
 export * from './mass-canceling.service';
 export * from '../../settings/market.service';
-export * from './fiat-sale.service';

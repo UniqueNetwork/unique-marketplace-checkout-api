@@ -4,14 +4,12 @@ import InputDataDecoder from 'ethereum-input-data-decoder';
 
 import { Escrow } from './base';
 import * as logging from '@app/utils/logging';
+import * as lib from '../utils/blockchain/web3';
 import * as util from '../utils/blockchain/util';
 import { MONEY_TRANSFER_STATUS } from './constants';
 import { MoneyTransfer } from '@app/entity';
 import { Logger } from '@nestjs/common';
 import { Contract } from 'ethers';
-import { HelperService } from '@app/helpers/helper.service';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { WEB3_GAS_ARGS } from '@app/uniquesdk';
 
 /**
  * Unique escrow implementation.
@@ -20,11 +18,10 @@ import { WEB3_GAS_ARGS } from '@app/uniquesdk';
  */
 export class UniqueEscrow extends Escrow {
   logger = new Logger(UniqueEscrow.name);
-  helperService = new HelperService();
   inputDecoder;
   etherDecoder;
   explorer;
-  web3conn: Web3Service;
+  web3conn;
   web3;
   contractOwner;
   SECTION_UNIQUE = 'unique';
@@ -66,7 +63,8 @@ export class UniqueEscrow extends Escrow {
     await this.connectApi();
     this.inputDecoder = new InputDataDecoder(this.getAbi());
     this.etherDecoder = new Interface(this.getAbi());
-    this.explorer = new util.UniqueExplorer(this.api, this.admin, this.helperService);
+    this.explorer = new util.UniqueExplorer(this.api, this.admin);
+    this.web3conn = lib.connectWeb3(this.config('unique.wsEndpoint'));
     this.web3 = this.web3conn.web3;
     this.contractOwner = this.web3.eth.accounts.privateKeyToAccount(this.config('unique.contractOwnerSeed'));
   }
@@ -77,7 +75,7 @@ export class UniqueEscrow extends Escrow {
    */
   async destroy() {
     if (!this.initialized) return;
-    this.web3conn.disconnect();
+    this.web3conn.provider.connection.close();
     await this.api.disconnect();
   }
 
@@ -86,7 +84,7 @@ export class UniqueEscrow extends Escrow {
    * @returns {string}
    */
   getAbi() {
-    return JSON.parse(this.helperService.marketABIStaticFile('MarketPlace.abi'));
+    return JSON.parse(util.marketABIStaticFile('MarketPlace.abi'));
   }
 
   /**
@@ -95,13 +93,15 @@ export class UniqueEscrow extends Escrow {
    * @param func
    */
   async withContract(func: any): Promise<any> {
-    const web3 = this.web3conn.web3;
+    const web3conn = lib.connectWeb3(this.config('unique.wsEndpoint'));
+    const web3 = web3conn.web3;
     web3.eth.accounts.wallet.add(this.contractOwner.privateKey);
     await func(
       web3,
       new web3.eth.Contract(this.getAbi(), this.config('unique.contractAddress')),
-      this.web3conn.contractHelpers(web3, this.contractOwner.address),
+      lib.contractHelpers(web3, this.contractOwner.address),
     );
+    web3conn.provider.connection.close();
   }
 
   /**
@@ -112,7 +112,7 @@ export class UniqueEscrow extends Escrow {
    */
   async addToAllowList(substrateAddress: string, contract: Contract, helpers: Contract): Promise<any> {
     const contractAddress = this.config('unique.contractAddress');
-    const ethAddress = this.web3conn.subToEth(substrateAddress),
+    const ethAddress = lib.subToEth(substrateAddress),
       toAdd = [];
     // let toCheck = [substrateAddress, ethAddress, evmToAddress(ethAddress, 42, 'blake2')];
     const toCheck = [ethAddress];
@@ -152,8 +152,7 @@ export class UniqueEscrow extends Escrow {
    */
   async connectApi(): Promise<any> {
     //this.api = await unique.connectApi(this.config('unique.wsEndpoint'), this.configMode === Escrow.MODE_PROD);
-
-    this.admin = this.helperService.privateKey(this.config('escrowSeed'));
+    this.admin = util.privateKey(this.config('escrowSeed'));
   }
 
   async processTransfer(blockNum, events) {
@@ -174,13 +173,13 @@ export class UniqueEscrow extends Escrow {
   }
 
   async processAddAsk(blockNum, extrinsic, inputData, signer) {
-    const addressTo = this.helperService.normalizeAccountId(extrinsic.args.target);
+    const addressTo = util.normalizeAccountId(extrinsic.args.target);
     const addressFrom = this.normalizeSubstrate(signer.toString()); // signer is substrate address of args.source
-    const addressFromEth = this.helperService.normalizeAccountId(extrinsic.args.source);
+    const addressFromEth = util.normalizeAccountId(extrinsic.args.source);
     const price = inputData.inputs[0].toString();
     const currency = inputData.inputs[1];
     const collectionEVMAddress = inputData.inputs[2];
-    const collectionId = this.helperService.extractCollectionIdFromAddress(collectionEVMAddress);
+    const collectionId = util.extractCollectionIdFromAddress(collectionEVMAddress);
     const tokenId = inputData.inputs[3].toNumber();
     if (!this.isCollectionManaged(collectionId)) return; // Collection not managed by market
     const activeAsk = await this.service.getActiveAsk(collectionId, tokenId, this.getNetwork());
@@ -221,9 +220,9 @@ export class UniqueEscrow extends Escrow {
     // const addressTo = util.normalizeAccountId(extrinsic.args.target);
     // const addressFrom = util.normalizeAccountId(extrinsic.args.source);
     const collectionEVMAddress = inputData.inputs[0];
-    const collectionId = this.helperService.extractCollectionIdFromAddress(collectionEVMAddress);
+    const collectionId = util.extractCollectionIdFromAddress(collectionEVMAddress);
     const tokenId = inputData.inputs[1].toNumber();
-    const buyer = this.helperService.normalizeAccountId(inputData.inputs[2]);
+    const buyer = util.normalizeAccountId(inputData.inputs[2]);
     // const receiver = util.normalizeAccountId(inputData.inputs[3]);
     const activeAsk = await this.service.getActiveAsk(collectionId, tokenId, this.getNetwork());
 
@@ -252,7 +251,7 @@ export class UniqueEscrow extends Escrow {
 
   async processCancelAsk(blockNum, inputData) {
     const collectionEVMAddress = inputData.inputs[0];
-    const collectionId = this.helperService.extractCollectionIdFromAddress(collectionEVMAddress);
+    const collectionId = util.extractCollectionIdFromAddress(collectionEVMAddress);
     if (!this.isCollectionManaged(collectionId)) return; // Collection not managed by market
     const tokenId = inputData.inputs[1].toNumber();
     const activeAsk = await this.service.getActiveAsk(collectionId, tokenId, this.getNetwork());
@@ -323,7 +322,7 @@ export class UniqueEscrow extends Escrow {
     const inputData = this.inputDecoder.decodeData(extrinsic.args.transaction.input);
     if (inputData.method === 'depositKSM') {
       const amount = inputData.inputs[0].toString();
-      const sender = this.helperService.normalizeAccountId(inputData.inputs[1]);
+      const sender = util.normalizeAccountId(inputData.inputs[1]);
       logging.log(`Got depositKSM (Sender: ${this.address2string(sender)}, amount: ${amount}) in block #${blockNum}`);
     }
   }
@@ -359,7 +358,7 @@ export class UniqueEscrow extends Escrow {
     try {
       logging.log(`Unique deposit for money transfer #${deposit.id} started`);
       const amount = BigInt(deposit.amount);
-      const ethAddress = this.web3conn.subToEth(deposit.extra.address);
+      const ethAddress = lib.subToEth(deposit.extra.address);
       await this.service.registerAccountPair(deposit.extra.address, ethAddress);
       logging.log(['amount', amount.toString(), 'ethAddress', ethAddress]);
 
@@ -369,12 +368,12 @@ export class UniqueEscrow extends Escrow {
           method = 'withdrawKSM';
           await contract.methods.withdrawKSM(-amount, ethAddress).send({
             from: this.contractOwner.address,
-            ...WEB3_GAS_ARGS,
+            ...lib.GAS_ARGS,
           });
         } else {
           await contract.methods.depositKSM(amount, ethAddress).send({
             from: this.contractOwner.address,
-            ...WEB3_GAS_ARGS,
+            ...lib.GAS_ARGS,
           });
         }
       });

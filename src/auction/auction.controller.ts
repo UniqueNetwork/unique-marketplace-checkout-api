@@ -24,6 +24,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { convertAddress } from '../utils/blockchain/util';
 import { AuctionCreationService } from './services/auction-creation.service';
 import { BidPlacingService } from './services/bid-placing.service';
 import {
@@ -47,7 +48,6 @@ import { DateHelper } from '@app/utils/date-helper';
 import { OfferEntityDto } from '@app/offers/dto';
 import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 import { Sdk } from '@unique-nft/substrate-client';
-import { HelperService } from '@app/helpers/helper.service';
 
 @ApiTags('Auction')
 @Controller('auction')
@@ -62,7 +62,6 @@ export class AuctionController {
     private readonly signatureVerifier: SignatureVerifier,
     @InjectKusamaSDK() private kusamaApi: Sdk,
     @InjectUniqueSDK() private uniqueApi: Sdk,
-    private helper: HelperService,
   ) {
     this.logger = new Logger(AuctionController.name);
   }
@@ -121,7 +120,7 @@ export class AuctionController {
   @ApiBadRequestResponse({ type: BadRequestResponse })
   async calculate(@Body() calculationRequest: CalculationRequestDto): Promise<CalculationInfoResponseDto> {
     try {
-      const bidderAddress = await this.helper.convertAddress(calculationRequest.bidderAddress, this.kusamaApi.api.registry.chainSS58);
+      const bidderAddress = await convertAddress(calculationRequest.bidderAddress, this.kusamaApi.api.registry.chainSS58);
 
       const [calculationInfo] = await this.bidPlacingService.getCalculationInfo({
         ...calculationRequest,
@@ -165,7 +164,7 @@ export class AuctionController {
       signerAddress,
     });
 
-    const ownerAddress = await this.helper.convertAddress(signerAddress, this.uniqueApi.api.registry.chainSS58);
+    const ownerAddress = await convertAddress(signerAddress, this.uniqueApi.api.registry.chainSS58);
     this.logger.debug;
     return this.auctionCancellingService.tryCancelAuction({
       collectionId: query.collectionId,
@@ -195,7 +194,7 @@ export class AuctionController {
       signerAddress,
     });
 
-    const bidderAddress = await this.helper.convertAddress(signerAddress, this.kusamaApi.api.registry.chainSS58);
+    const bidderAddress = await convertAddress(signerAddress, this.kusamaApi.api.registry.chainSS58);
 
     await this.bidWithdrawService.withdrawBidByBidder({
       collectionId: query.collectionId,
@@ -241,7 +240,7 @@ export class AuctionController {
       signerAddress,
     });
 
-    const bidderAddress = await this.helper.convertAddress(signerAddress, this.kusamaApi.api.registry.chainSS58);
+    const bidderAddress = await convertAddress(signerAddress, this.kusamaApi.api.registry.chainSS58);
 
     await this.bidWithdrawService.withdrawBidsByBidder({
       bidderAddress,

@@ -8,18 +8,17 @@ import { EscrowService } from './service';
 import { Escrow } from './base';
 import { AuctionClosingScheduler } from '../auction/services/closing/auction-closing.scheduler';
 import { PostgresIoAdapter } from '../broadcast/services/postgres-io.adapter';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '../config/market-config';
 import { BroadcastService } from '../broadcast/services/broadcast.service';
 import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { SdkProvider } from '../uniquesdk/sdk-provider';
+import { Sdk } from '@unique-nft/substrate-client';
 
 @Injectable()
 export class EscrowCommand {
   constructor(
     private moduleRef: ModuleRef,
-    @InjectUniqueSDK() private readonly unique: SdkProvider,
-    @InjectKusamaSDK() private readonly kusama: SdkProvider,
+    @InjectUniqueSDK() private readonly unique: Sdk,
+    @InjectKusamaSDK() private readonly kusama: Sdk,
   ) {}
 
   @Command({
@@ -41,9 +40,8 @@ export class EscrowCommand {
 
     const config = this.moduleRef.get('CONFIG', { strict: false });
     const service = this.moduleRef.get(EscrowService, { strict: false });
-    const web3service = this.moduleRef.get(Web3Service, { strict: false });
 
-    const escrow = new networks[network](config, service, network === 'unique' ? this.unique.sdk : this.kusama.sdk, web3service);
+    const escrow = new networks[network](config, service, network === 'unique' ? this.unique : this.kusama);
 
     await escrow.init();
 

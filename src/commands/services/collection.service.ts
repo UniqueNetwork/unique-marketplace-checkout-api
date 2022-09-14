@@ -1,27 +1,32 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { bgGreen, bgRed, black, cyan, yellow } from 'cli-color';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '@app/config/market-config';
 import { ICollectionCommand } from '../interfaces/collection.interface';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
-import { InjectUniqueSDK } from '@app/uniquesdk';
+import { SdkCollectionService } from '@app/uniquesdk/sdk-collections.service';
+import { SdkTokensService } from '@app/uniquesdk';
 
 @Injectable()
 export class CollectionCommandService {
-  constructor(@Inject('CONFIG') private config: MarketConfig, @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider) {}
+  constructor(
+    @Inject('CONFIG') private config: MarketConfig,
+    private sdkTokens: SdkTokensService,
+    private sdkCollections: SdkCollectionService,
+  ) {}
 
   async showCollection(data: ICollectionCommand): Promise<any> {
     const { collection, token, depth } = data;
-
+    await this.sdkCollections.connect('unique');
+    await this.sdkTokens.connect('unique');
     // Checkout flag wss endpoint
     console.log(cyan('============== WSS Connected =============='), yellow(true));
     console.log(cyan('WS endpoint:'), yellow(this.config.blockchain.unique.wsEndpoint));
 
     // Checkout collection ID
-    const collectionNew = await this.uniqueProvider.collectionsService.collectionById(+collection);
+    const collectionNew = await this.sdkCollections.collectionById(+collection);
 
     console.log(cyan('Collection ID:'), yellow(collection));
-    if (collectionNew.sponsorship !== undefined && collectionNew.sponsorship !== null) {
+    if (collectionNew.sponsorship !== undefined || collectionNew.sponsorship !== null) {
       Object.entries(collectionNew.sponsorship).map(([key, value]) => {
         if (key === 'Unconfirmed') {
           console.log(cyan('Collection Sponsorship:'), bgRed(black(' ' + key.toUpperCase() + ' ')));
@@ -38,25 +43,15 @@ export class CollectionCommandService {
     // Checkout token id
     if (token) {
       console.log(cyan('Token ID:'), yellow(token));
-      const tokenNew = await this.uniqueProvider.tokensService.tokenData(+token, +collection);
+      const tokenNew = await this.sdkTokens.tokenData(+token, +collection);
       console.dir(tokenNew, { depth: depth });
-
-      // Checkout token is bundle
-      const tokenIsBundle = await this.uniqueProvider.tokensService.isBundle(+token, +collection);
-      console.log(cyan('Token is bundle:'), yellow(tokenIsBundle));
-
-      if (tokenIsBundle) {
-        console.log(cyan('Get nested token:'));
-        const tokenNested = await this.uniqueProvider.tokensService.getBundle(+token, +collection);
-        console.dir(tokenNested, { depth: depth });
-      }
     } else {
       console.log(cyan('Token ID:'), yellow(1));
-      const tokenNew = await this.uniqueProvider.tokensService.tokenData(1, +collection);
+      const tokenNew = await this.sdkTokens.tokenData(1, +collection);
       console.dir(tokenNew, { depth: depth });
     }
-    await this.uniqueProvider.disconnect();
-
+    await this.sdkTokens.disconnect();
+    await this.sdkCollections.disconnect();
     console.log(cyan('============== WSS Disconnected =============='), yellow(true));
     process.exit(0);
   }

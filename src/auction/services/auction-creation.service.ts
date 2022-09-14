@@ -6,21 +6,21 @@ import { v4 as uuid } from 'uuid';
 import { BroadcastService } from '@app/broadcast/services/broadcast.service';
 import { ASK_STATUS } from '@app/escrow/constants';
 import { BlockchainBlock, OffersEntity } from '@app/entity';
-import { MarketConfig } from '@app/config';
-
+import { MarketConfig } from '@app/config/market-config';
+import { SdkExtrinsicService, SdkStateService } from '@app/uniquesdk';
+import { subToEth } from '@app/utils/blockchain/web3';
 import { DateHelper } from '@app/utils/date-helper';
+import { NetworkName } from '@app/uniquesdk/sdk.types';
 import { getTokenDescription } from '@app/utils';
 
 import { AuctionStatus } from '@app/types';
-import { AuctionDto, OfferEntityDto } from '@app/offers/dto/offer-dto';
+import { OfferEntityDto } from '@app/offers/dto/offer-dto';
 import { SearchIndexService } from './search-index.service';
 import { AuctionCredentials } from '../providers';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
 import { CreateAuctionAndBroadcastArgs } from '@app/types/auction';
 import { CreateAuctionRequest } from '../requests';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
+import { AuctionDto } from '@app/offers/dto/offer-dto';
 
 type FailedAuctionArgs = {
   collectionId: string;
@@ -34,29 +34,31 @@ type FailedAuctionArgs = {
 @Injectable()
 export class AuctionCreationService {
   private readonly logger = new Logger(AuctionCreationService.name);
+
   private blockchainBlockRepository: Repository<BlockchainBlock>;
   private readonly offersEntityRepository: Repository<OffersEntity>;
 
   constructor(
     private connection: DataSource,
     private broadcastService: BroadcastService,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
-    private readonly web3conn: Web3Service,
+    private readonly sdkExtrinsicService: SdkExtrinsicService,
     @Inject('CONFIG') private config: MarketConfig,
     private searchIndexService: SearchIndexService,
     @Inject('AUCTION_CREDENTIALS') private auctionCredentials: AuctionCredentials,
     @InjectSentry() private readonly sentryService: SentryService,
+    private sdkState: SdkStateService,
   ) {
     this.offersEntityRepository = connection.getRepository(OffersEntity);
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
+    this.sdkState.connect('unique');
   }
 
   async checkOwner(collectionId: number, tokenId: number): Promise<boolean> {
-    const token = (await this.uniqueProvider.stateService.tokenData(collectionId, tokenId)).json;
+    const token = (await this.sdkState.tokenData(collectionId, tokenId)).json;
     const owner = token['owner'];
 
     const auctionSubstract = encodeAddress(this.auctionCredentials.uniqueAddress);
-    const auctionEth = this.web3conn.subToEth(auctionSubstract).toLowerCase();
+    const auctionEth = subToEth(auctionSubstract).toLowerCase();
 
     if (owner?.substrate) {
       return encodeAddress(owner.substrate) === auctionSubstract;
@@ -76,7 +78,7 @@ export class AuctionCreationService {
     const { days, minutes, startPrice, priceStep, signature, signerPayloadJSON } = createAuctionRequest;
 
     const { blockNumber, collectionId, tokenId, addressFrom, isCompleted, internalError, blockHash } =
-      await this.uniqueProvider.transferService.submitTransferToken(signerPayloadJSON, signature);
+      await this.sdkExtrinsicService.submitTransferToken(signerPayloadJSON, signature, NetworkName.UNIQUE);
 
     if (!isCompleted) {
       this.sentryService.instance().captureException(new BadRequestException(internalError), {
@@ -168,6 +170,7 @@ export class AuctionCreationService {
       startPrice: offer.startPrice,
       status: offer.status_auction as AuctionStatus,
       stopAt: offer.stopAt,
+      bids: [],
     });
 
     offer.auction = offer?.auction || getAcutionDto(newOffer);

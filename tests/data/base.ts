@@ -1,54 +1,26 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
 
-import { AppModule } from '@app/app.module';
-import { ignoreQueryCase, useGlobalPipes } from '@app/utils/application';
-import { OfferSortingRequest } from '@app/utils/sorting/sorting-request';
-import { PaginationRequest } from '@app/utils/pagination/pagination-request';
-import { OffersFilter } from '@app/offers/dto/offers-filter';
+import { getConfig } from '../../src/config';
+import { AppModule } from '../../src/app.module';
+import { ignoreQueryCase, useGlobalPipes } from '../../src/utils/application';
+import { OfferSortingRequest } from '../../src/utils/sorting/sorting-request';
+import { PaginationRequest } from '../../src/utils/pagination/pagination-request';
+import { OffersFilter } from '../../src/offers/dto/offers-filter';
 import request from 'supertest';
-import { getConnectionOptions } from '@app/database/connection-options';
-import { DataSource } from 'typeorm';
-import { appConfig, MarketConfig } from '@app/config';
+import { MarketConfig } from '../../src/config/market-config';
 
 const testConfigFactory = (extra?: Partial<MarketConfig>) => (): MarketConfig => {
-  let config = appConfig;
-  config.postgresUrl = appConfig.testingPostgresUrl;
+  let config = getConfig();
+  config.postgresUrl = config.testingPostgresUrl;
   config = { ...config, ...(extra || {}) };
   return config;
 };
 
 type OverrideProviders = (builder: TestingModuleBuilder) => void;
 
-export const initApp = async (overrideProviders?: OverrideProviders): Promise<INestApplication> => {
-  const config = appConfig;
-  const databaseTestOptions = getConnectionOptions(config, true);
-  const mainDatabase = new DataSource(getConnectionOptions());
-  await mainDatabase.initialize();
-  const ifNotExist = await mainDatabase.query(
-    `select exists( SELECT datname FROM pg_catalog.pg_database WHERE lower(datname) = lower('${databaseTestOptions.database}'));`,
-  );
-
-  if (!ifNotExist[0].exists) {
-    await mainDatabase.query(`CREATE DATABASE ${databaseTestOptions.database}`);
-  }
-
-  const testDatabase = new DataSource(getConnectionOptions(config, true));
-
-  // Database initialization
-  await testDatabase
-    .initialize()
-    .then(() => {
-      console.log('Data Source has been initialized!');
-    })
-    .catch((err) => {
-      console.error('Error during Data Source initialization', err);
-    });
-
-  await mainDatabase.destroy();
-
-  // Create a new testing module for each test
-  const testingModuleBuilder = Test.createTestingModule({
+export const initApp = async (config?: Partial<MarketConfig>, overrideProviders?: OverrideProviders): Promise<INestApplication> => {
+  const testingModuleBuilder = await Test.createTestingModule({
     imports: [AppModule],
   });
 
@@ -58,10 +30,10 @@ export const initApp = async (overrideProviders?: OverrideProviders): Promise<IN
 
   const moduleFixture = await testingModuleBuilder.compile();
 
-  // Create application
   const app = moduleFixture.createNestApplication();
   ignoreQueryCase(app);
   useGlobalPipes(app);
+
   return app;
 };
 

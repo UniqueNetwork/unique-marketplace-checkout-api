@@ -1,33 +1,22 @@
-import { appConfig } from '@app/config';
+import { getConfig } from '../config';
 import { ProjectNamingStrategy } from './naming_strategy';
 import { DataSourceOptions } from 'typeorm/data-source/DataSourceOptions';
-import * as PostgressConnectionStringParser from 'pg-connection-string';
-import { DatabaseLogger } from './database.logger';
 import { DataSource } from 'typeorm';
 
-export const getConnectionOptions = (config = appConfig, test = false, logger = false) => {
-  const urlDatabase = test ? config.testingPostgresUrl : config.postgresUrl;
-  const connectionOptions = PostgressConnectionStringParser.parse(urlDatabase);
-  const dataSourceBasicOptions: DataSourceOptions = {
+export const getConnectionOptions = (config = getConfig(), test = false, logger = false): DataSourceOptions => {
+  return {
     type: 'postgres',
-    host: connectionOptions.host,
-    port: +connectionOptions.port,
-    username: connectionOptions.user,
-    password: connectionOptions.password,
-    database: connectionOptions.database,
+    url: test ? config.testingPostgresUrl : config.postgresUrl,
     entities: [__dirname + '/../**/entity.{t,j}s', __dirname + '/../entity/*.{t,j}s'],
     migrations: [__dirname + '/../migrations/*.{t,j}s'],
-    logging: ['error'],
-    logger: new DatabaseLogger(),
     synchronize: false,
-    migrationsRun: config.autoDBMigrations || false,
+    logging: logger ? logger : config.dev.debugMigrations,
+    migrationsRun: true,
+    //migrations: ['../../dist/migrations/**/*.js'],
     migrationsTableName: 'migrations',
     namingStrategy: new ProjectNamingStrategy(),
-    subscribers: [__dirname + '/../migrations/*.{t,j}s'],
   };
-  return dataSourceBasicOptions;
 };
 
 export default getConnectionOptions();
-// Migrations
 export const AppDataSource = new DataSource(getConnectionOptions());

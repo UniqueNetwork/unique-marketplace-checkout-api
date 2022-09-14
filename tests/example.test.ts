@@ -5,7 +5,7 @@ import { initApp } from './data';
 describe('App', () => {
   let app: INestApplication;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     app = await initApp();
     await app.init();
   });

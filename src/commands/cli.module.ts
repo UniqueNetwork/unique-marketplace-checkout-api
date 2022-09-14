@@ -13,8 +13,7 @@ import { DeployContractService } from '@app/commands/services/deploy-contract.se
 import { UniqueSdkModule } from '@app/uniquesdk/sdk.module';
 import { DatabaseORMModule } from '@app/database/database.module';
 import { StartMarketService } from './services/start-market.service';
-import { HelperService } from '@app/helpers/helper.service';
-import { Web3Service } from '@app/uniquesdk/web3.service';
+import { SdkTestService } from '@app/uniquesdk/sdk.service';
 
 @Module({
   imports: [
@@ -29,14 +28,6 @@ import { Web3Service } from '@app/uniquesdk/web3.service';
     EscrowModule,
   ],
   controllers: [],
-  providers: [
-    CliCommands,
-    CollectionCommandService,
-    CheckConfigCommandService,
-    DeployContractService,
-    StartMarketService,
-    HelperService,
-    Web3Service,
-  ],
+  providers: [CliCommands, CollectionCommandService, CheckConfigCommandService, DeployContractService, StartMarketService, SdkTestService],
 })
 export class CLIModule {}

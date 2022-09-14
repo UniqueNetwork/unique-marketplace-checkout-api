@@ -47,10 +47,4 @@ export class SearchIndex {
     default: TypeAttributToken.String,
   })
   type: TypeAttributToken;
-
-  @Column('jsonb', { name: 'attributes', default: {} })
-  attributes: string;
-
-  @Column('jsonb', { name: 'nested', default: [] })
-  nested: string;
 }

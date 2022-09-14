@@ -17,14 +17,11 @@ import { AuctionClosingScheduler } from './services/closing/auction-closing.sche
 import { AuctionClosingService } from './services/closing/auction-closing.service';
 import { ForceClosingService } from './services/closing/force-closing.service';
 import { SearchIndexService } from './services/search-index.service';
-import { HelperService } from '@app/helpers/helper.service';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { DatabaseORMModule } from '@app/database/database.module';
 
 const isAuctionTestingStage = process.env.IS_AUCTION_TESTING_STAGE === 'true' || process.env.NODE_ENV === 'test';
 
 @Module({
-  imports: [ConfigServiceModule, ScheduleModule.forRoot(), UniqueSdkModule, DatabaseORMModule],
+  imports: [ConfigServiceModule, ScheduleModule.forRoot(), UniqueSdkModule],
   providers: [
     auctionCredentialsProvider,
     SignatureVerifier,
@@ -36,8 +33,6 @@ const isAuctionTestingStage = process.env.IS_AUCTION_TESTING_STAGE === 'true' ||
     AuctionClosingScheduler,
     ForceClosingService,
     SearchIndexService,
-    HelperService,
-    Web3Service,
   ],
   controllers: [AuctionController, SearchIndexController, ...(isAuctionTestingStage ? [AuctionForceCloseController] : [])],
   exports: [AuctionClosingScheduler, SearchIndexService, AuctionCreationService, SignatureVerifier],

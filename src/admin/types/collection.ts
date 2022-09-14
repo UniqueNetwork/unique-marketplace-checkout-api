@@ -11,6 +11,15 @@ export enum CollectionImportType {
   Api = 'Api',
 }
 
+export type DecodedCollection = {
+  owner: string;
+  mode: CollectionMode;
+  tokenPrefix: string;
+  name: string;
+  description: string;
+  data: any;
+};
+
 export type ImportByIdResult = {
   collection: Collection;
   message: string;

@@ -2,19 +2,16 @@ import { BadRequestException, HttpStatus, Inject, Injectable, Logger } from '@ne
 import { DataSource, Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import { encodeAddress } from '@polkadot/util-crypto';
-import { KeyringProvider } from '@unique-nft/accounts/keyring';
-import { SignatureType } from '@unique-nft/accounts';
 
 import { AuctionBidEntity, MoneyTransfer, OffersEntity } from '@app/entity';
 import { MONEY_TRANSFER_STATUS, MONEY_TRANSFER_TYPES } from '@app/escrow/constants';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
-import { MarketConfig } from '@app/config';
+import { SdkExtrinsicService, NetworkName, InjectKusamaSDK } from '@app/uniquesdk';
 
 import { BidStatus, SellingMethod } from '@app/types';
 import { DatabaseHelper } from './helpers/database-helper';
+import { AuctionCredentials } from '../providers';
 import { BidsWitdrawByOwner, BidsWithdraw } from '../responses';
-import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 type BidWithdrawArgs = {
   collectionId: number;
@@ -30,15 +27,17 @@ type BidsWirthdrawArgs = {
 @Injectable()
 export class BidWithdrawService {
   private readonly logger = new Logger(BidWithdrawService.name);
+
   private readonly bidRepository: Repository<AuctionBidEntity>;
+
   private moneyTransferRepository: Repository<MoneyTransfer>;
 
   constructor(
     private connection: DataSource,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
-    @InjectKusamaSDK() private readonly kusamaProvider: SdkProvider,
+    @InjectKusamaSDK() private kusamaApi,
+    @Inject('AUCTION_CREDENTIALS') private auctionCredentials: AuctionCredentials,
+    private readonly sdkExtrinsicService: SdkExtrinsicService,
     @InjectSentry() private readonly sentryService: SentryService,
-    @Inject('CONFIG') private config: MarketConfig,
   ) {
     this.bidRepository = connection.manager.getRepository(AuctionBidEntity);
     this.moneyTransferRepository = connection.getRepository(MoneyTransfer);
@@ -82,12 +81,17 @@ export class BidWithdrawService {
    * @param withdrawingBid
    */
   async makeWithdrawalTransfer(withdrawingBid: AuctionBidEntity): Promise<void> {
+    const auctionKeyring = this.auctionCredentials.keyring;
     const amount = BigInt(withdrawingBid.amount) * -1n;
 
-    const auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
+    const nonce = await this.kusamaApi.api.rpc.system.accountNextIndex(auctionKeyring.address);
 
-    await this.kusamaProvider.transferService
-      .moneyTransfer(auctionAccount, withdrawingBid.bidderAddress, amount)
+    const tx = await this.kusamaApi.api.tx.balances
+      .transferKeepAlive(withdrawingBid.bidderAddress, amount)
+      .signAsync(auctionKeyring, { nonce });
+
+    await this.sdkExtrinsicService
+      .submit(tx, NetworkName.KUSAMA)
       .then(async ({ blockNumber }) => {
         await this.bidRepository.update(withdrawingBid.id, {
           status: BidStatus.finished,
