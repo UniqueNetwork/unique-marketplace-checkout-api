@@ -1,9 +1,34 @@
-import { Controller, Get, HttpStatus, NotFoundException, Param, Query, UseInterceptors, ParseIntPipe, Post, Body } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Query,
+  UseInterceptors,
+  ParseIntPipe,
+  Post,
+  Body,
+  HttpCode,
+  ValidationPipe,
+} from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags, ApiBadRequestResponse, ApiConflictResponse } from '@nestjs/swagger';
 import * as fs from 'fs';
 
 import { OffersService } from './offers.service';
-import { OfferTraits, OfferEntityDto, OffersFilter, OfferAttributesDto, OfferAttributes, PayOfferResponseDto, PayOfferDto } from './dto';
+import {
+  OfferTraits,
+  OfferEntityDto,
+  OffersFilter,
+  OfferAttributesDto,
+  OfferAttributes,
+  PayOfferResponseDto,
+  PayOfferDto,
+  BadRequestResponse,
+  ConflictResponse,
+  CreateFiatInput,
+  OfferFiatDto,
+} from './dto';
 import { ParseOffersFilterPipe, ParseOffersAttributes } from './pipes';
 
 import { PaginationRequest } from '../utils/pagination/pagination-request';
@@ -77,5 +102,18 @@ export class OffersController {
   @Post('pay')
   async pay(@Body() input: PayOfferDto): Promise<PayOfferResponseDto> {
     return this.payOffersService.payOffer(input);
+  }
+
+  @Post('create_fiat_offer')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Create fiat offer',
+    description: fs.readFileSync('docs/create_fiat_offer.md').toString(),
+  })
+  @ApiResponse({ status: HttpStatus.CREATED, type: OfferFiatDto })
+  @ApiBadRequestResponse({ type: BadRequestResponse })
+  @ApiConflictResponse({ type: ConflictResponse })
+  async createFiat(@Body(new ValidationPipe({ transform: true })) createFiatInput: CreateFiatInput): Promise<OfferFiatDto> {
+    return this.payOffersService.createFiat(createFiatInput);
   }
 }
