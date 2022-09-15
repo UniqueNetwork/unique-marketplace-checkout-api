@@ -1,4 +1,4 @@
-## Create fiat offer
+## Cancel fiat offer
 
 Authorization is performed using a signature in the blockchain. 
 

@@ -23,6 +23,6 @@ import { DatabaseORMModule } from '@app/database/database.module';
   ],
   controllers: [AdminController],
   providers: [AdminService, CollectionsService, MassSaleService, TokenService, MassCancelingService, FiatSaleService],
-  exports: [AdminService, MassSaleService, MassCancelingService, TokenService],
+  exports: [AdminService, MassSaleService, MassCancelingService, TokenService, JwtModule],
 })
 export class AdminModule {}

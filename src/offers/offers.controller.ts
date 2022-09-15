@@ -11,8 +11,19 @@ import {
   Body,
   HttpCode,
   ValidationPipe,
+  UseGuards,
+  Delete,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags, ApiBadRequestResponse, ApiConflictResponse } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import * as fs from 'fs';
 
 import { OffersService } from './offers.service';
@@ -28,6 +39,7 @@ import {
   ConflictResponse,
   CreateFiatInput,
   OfferFiatDto,
+  CancelFiatInput,
 } from './dto';
 import { ParseOffersFilterPipe, ParseOffersAttributes } from './pipes';
 
@@ -36,6 +48,10 @@ import { PaginationResultDto } from '../utils/pagination/pagination-result';
 import { OfferSortingRequest } from '../utils/sorting/sorting-request';
 import { TraceInterceptor } from '../utils/sentry';
 import { PayOffersService } from './pay.service';
+
+import { AuthGuard, MainSaleSeedGuard } from '@app/admin/guards';
+
+import { ResponseAdminUnauthorizedDto, ResponseAdminForbiddenDto } from '@app/admin/dto';
 
 @ApiTags('Offers')
 @Controller()
@@ -104,6 +120,15 @@ export class OffersController {
     return this.payOffersService.payOffer(input);
   }
 
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized address or bad signature',
+    type: ResponseAdminUnauthorizedDto,
+  })
+  @ApiForbiddenResponse({
+    description: 'Forbidden. Marketplace disabled management for administrators.',
+    type: ResponseAdminForbiddenDto,
+  })
   @Post('create_fiat_offer')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -113,7 +138,31 @@ export class OffersController {
   @ApiResponse({ status: HttpStatus.CREATED, type: OfferFiatDto })
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @ApiConflictResponse({ type: ConflictResponse })
+  @UseGuards(AuthGuard, MainSaleSeedGuard)
   async createFiat(@Body(new ValidationPipe({ transform: true })) createFiatInput: CreateFiatInput): Promise<OfferFiatDto> {
     return this.payOffersService.createFiat(createFiatInput);
+  }
+
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized address or bad signature',
+    type: ResponseAdminUnauthorizedDto,
+  })
+  @ApiForbiddenResponse({
+    description: 'Forbidden. Marketplace disabled management for administrators.',
+    type: ResponseAdminForbiddenDto,
+  })
+  @Delete('cancel_fiat_offer')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cancel fiat offer',
+    description: fs.readFileSync('docs/cancel_fiat_offer.md').toString(),
+  })
+  @ApiResponse({ status: HttpStatus.CREATED, type: OfferFiatDto })
+  @ApiBadRequestResponse({ type: BadRequestResponse })
+  @ApiConflictResponse({ type: ConflictResponse })
+  @UseGuards(AuthGuard, MainSaleSeedGuard)
+  async cancelFiat(@Body(new ValidationPipe({ transform: true })) cancelFiatInput: CancelFiatInput): Promise<OfferFiatDto> {
+    return this.payOffersService.cancelFiat(cancelFiatInput);
   }
 }

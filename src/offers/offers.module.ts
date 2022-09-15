@@ -8,8 +8,10 @@ import { OffersController } from './offers.controller';
 import { OffersService } from './offers.service';
 import { PayOffersService } from './pay.service';
 
+import { AdminModule } from '@app/admin/admin.module';
+
 @Module({
-  imports: [ConfigServiceModule, AuctionModule],
+  imports: [ConfigServiceModule, AuctionModule, AdminModule],
   controllers: [OffersController],
   providers: [OffersService, OffersFilterService, PayOffersService],
   exports: [OffersService],

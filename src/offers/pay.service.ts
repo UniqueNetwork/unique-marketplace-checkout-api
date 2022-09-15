@@ -5,16 +5,17 @@ import { SignatureType, Account } from '@unique-nft/accounts';
 import { KeyringProvider } from '@unique-nft/accounts/keyring';
 import { KeyringPair } from '@polkadot/keyring/types';
 import { v4 as uuid } from 'uuid';
+import { Sdk } from '@unique-nft/substrate-client';
 
-import { SdkTransferService, SdkExtrinsicService, NetworkName } from '@app/uniquesdk';
+import { SdkTransferService } from '@app/uniquesdk';
 import { MarketConfig } from '@app/config/market-config';
-import { OffersEntity, BlockchainBlock } from '@app/entity';
+import { OffersEntity } from '@app/entity';
 import { ASK_STATUS } from '@app/escrow/constants';
 import { SellingMethod } from '@app/types';
-import { InjectSentry, SentryService } from '@app/utils/sentry';
 import { SearchIndexService } from '@app/auction/services/search-index.service';
+import { InjectUniqueSDK } from '@app/uniquesdk';
 
-import { PayOfferDto, PayOfferResponseDto, CreateFiatInput, OfferFiatDto } from './dto';
+import { PayOfferDto, PayOfferResponseDto, CreateFiatInput, OfferFiatDto, CancelFiatInput } from './dto';
 
 type PaymentsResult = {
   id: string;
@@ -32,8 +33,6 @@ type PaymentsResult = {
 export class PayOffersService {
   private mainAccount: Account<KeyringPair>;
 
-  private blockchainBlockRepository: Repository<BlockchainBlock>;
-
   private logger: Logger;
   private readonly offersRepository: Repository<OffersEntity>;
   private readonly cko = new Checkout(this.config.payment.checkout.secretKey);
@@ -41,14 +40,12 @@ export class PayOffersService {
     private connection: DataSource,
     @Inject('CONFIG') private config: MarketConfig,
     private readonly sdkTransferService: SdkTransferService,
-    private readonly sdkExtrinsicService: SdkExtrinsicService,
-    @InjectSentry() private readonly sentryService: SentryService,
     private searchIndexService: SearchIndexService,
+    @InjectUniqueSDK() private readonly unique: Sdk,
   ) {
     this.logger = new Logger(PayOffersService.name);
     this.offersRepository = this.connection.getRepository(OffersEntity);
     this.mainAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
-    this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
   }
 
   async payOffer(input: PayOfferDto): Promise<PayOfferResponseDto> {
@@ -161,48 +158,38 @@ export class PayOffersService {
 
   async createFiat(createFiatInput: CreateFiatInput): Promise<OfferFiatDto> {
     try {
-      const { blockNumber, collectionId, tokenId, addressTo, addressFrom, isCompleted, internalError, blockHash } =
-        await this.sdkExtrinsicService.submitTransferToken(
-          createFiatInput.signerPayloadJSON,
-          createFiatInput.signature,
-          NetworkName.UNIQUE,
-        );
-
-      if (!isCompleted) {
-        this.sentryService.instance().captureException(new BadRequestException(internalError), {
-          tags: { section: 'fiat' },
-        });
-        throw new BadRequestException({
-          statusCode: HttpStatus.CONFLICT,
-          message: `Failed at block # ${blockNumber} (${blockHash.toHex()})`,
-        });
-      }
-      const block = this.blockchainBlockRepository.create({
-        network: this.config.blockchain.unique.network,
-        block_number: blockNumber.toString(),
-        created_at: new Date(),
+      const { tokens: accountTokens } = await this.unique.tokens.getAccountTokens({
+        collectionId: createFiatInput.collectionId,
+        address: this.mainAccount.instance.address,
       });
 
-      await this.connection.createQueryBuilder().insert().into(BlockchainBlock).values(block).orIgnore().execute();
+      const token = accountTokens.find((t) => t.tokenId === createFiatInput.tokenId);
+
+      if (!token) {
+        throw new BadRequestException({
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'You are not the owner of the token',
+          error: 'You are not the owner of the token',
+        });
+      }
 
       const newOffer = this.offersRepository.create({
         id: uuid(),
         type: SellingMethod.Fiat,
         status: ASK_STATUS.ACTIVE,
-        collection_id: collectionId.toString(),
-        token_id: tokenId.toString(),
+        collection_id: token.collectionId.toString(),
+        token_id: token.tokenId.toString(),
         network: this.config.blockchain.unique.network,
         price: (createFiatInput.price * 100).toString(),
         currency: createFiatInput.currency,
-        address_from: addressFrom,
-        address_to: addressTo,
+        address_from: this.mainAccount.instance.address,
       });
 
       const savedOffer = await this.offersRepository.save(newOffer);
 
       await this.searchIndexService.addSearchIndexIfNotExists({
-        collectionId: Number(collectionId),
-        tokenId: Number(tokenId),
+        collectionId: Number(savedOffer.collection_id),
+        tokenId: Number(savedOffer.token_id),
       });
 
       return {
@@ -215,5 +202,36 @@ export class PayOffersService {
     } catch (error) {
       throw new BadRequestException(error.message);
     }
+  }
+
+  async cancelFiat(cancelFiatInput: CancelFiatInput): Promise<OfferFiatDto> {
+    const offer = await this.offersRepository.findOne({
+      where: {
+        collection_id: cancelFiatInput.collectionId.toString(),
+        token_id: cancelFiatInput.tokenId.toString(),
+        address_from: this.mainAccount.instance.address,
+        status: ASK_STATUS.ACTIVE,
+      },
+    });
+    if (!offer) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Active offer not found',
+        error: 'Active offer not found',
+      });
+    }
+
+    const updatedOffer = await this.offersRepository.save({
+      ...offer,
+      status: ASK_STATUS.CANCELLED,
+    });
+
+    return {
+      id: updatedOffer.id,
+      collectionId: parseInt(updatedOffer.collection_id),
+      tokenId: parseInt(updatedOffer.token_id),
+      price: updatedOffer.price,
+      seller: updatedOffer.address_from,
+    };
   }
 }

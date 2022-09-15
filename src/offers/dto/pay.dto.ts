@@ -1,11 +1,11 @@
-import { IsNotEmpty, IsString, IsBoolean, IsNumber, Min, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsString, IsBoolean, IsNumber, Min, IsEnum, Max, IsPositive, IsInt } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { HttpStatus } from '@nestjs/common';
 import { HexString } from '@unique-nft/substrate-client/types';
 
 import { CurrencyNames } from '@app/types';
 import { enumToArray } from '@app/utils';
-import { SignerPayload } from '@app/auction/requests/signer-payload.dto';
+import { U32_MAX_VALUE } from '@app/admin/constants';
 
 export class PayOfferDto {
   @ApiProperty()
@@ -65,11 +65,14 @@ export class CreateFiatInput {
   @IsEnum(CurrencyNames)
   currency: CurrencyNames;
 
-  @ApiProperty({ example: '0x0000000000000000000000000000000000000000' })
-  signature: HexString;
+  @ApiProperty({ example: 1 })
+  @Max(U32_MAX_VALUE)
+  @IsPositive()
+  @IsInt()
+  collectionId: number;
 
-  @ApiProperty({ type: SignerPayload })
-  signerPayloadJSON: SignerPayload;
+  @ApiProperty({ description: 'Token ID', example: 4 })
+  tokenId: number;
 }
 
 export class OfferFiatDto {
@@ -87,4 +90,15 @@ export class OfferFiatDto {
 
   @ApiProperty({ description: 'Seller storage address', example: '5CfC8HRcV5Rc4jHFHmZsSjADCMYc7zoWbvxdoNG9qwEP7aUB' })
   seller: string;
+}
+
+export class CancelFiatInput {
+  @ApiProperty({ example: 1 })
+  @Max(U32_MAX_VALUE)
+  @IsPositive()
+  @IsInt()
+  collectionId: number;
+
+  @ApiProperty({ description: 'Token ID', example: 4 })
+  tokenId: number;
 }
