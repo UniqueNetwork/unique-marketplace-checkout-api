@@ -83,4 +83,9 @@ export default {
     commission: parseInt(process.env.AUCTION_COMMISSION || '10', 10),
   },
   ipfs: process.env.IPFS || 'https://ipfs.uniquenetwork.dev/ipfs',
+  payment: {
+    checkout: {
+      secretKey: process.env.CHECKOUT_SECRET_KEY,
+    },
+  },
 } as MarketConfig;
