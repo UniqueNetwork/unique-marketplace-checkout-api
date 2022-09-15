@@ -1,23 +1,18 @@
 import { ForbiddenException, HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '../../config/market-config';
 import { JwtService } from '@nestjs/jwt';
 import { v4 as uuid } from 'uuid';
+import * as util from '../../utils/blockchain/util';
 import { ResponseAdminDto } from '../dto/response-admin.dto';
 import { AdminSessionEntity } from '../../entity/adminsession-entity';
-import { HelperService } from '@app/helpers/helper.service';
 
 @Injectable()
 export class AdminService {
   private logger: Logger;
   private readonly adminRepository: Repository<AdminSessionEntity>;
 
-  constructor(
-    private connection: DataSource,
-    private helper: HelperService,
-    @Inject('CONFIG') private config: MarketConfig,
-    private jwtService: JwtService,
-  ) {
+  constructor(private connection: DataSource, @Inject('CONFIG') private config: MarketConfig, private jwtService: JwtService) {
     this.logger = new Logger(AdminService.name);
     this.adminRepository = connection.manager.getRepository(AdminSessionEntity);
   }
@@ -31,7 +26,7 @@ export class AdminService {
   async login(signerAddress: string): Promise<ResponseAdminDto> {
     this.checkAdministratorAddress(signerAddress);
 
-    const substrateAddress = this.helper.normalizeAccountId(signerAddress);
+    const substrateAddress = util.normalizeAccountId(signerAddress);
     const token = await this.generateToken(signerAddress);
     const session = await this.adminRepository.create({
       id: uuid(),

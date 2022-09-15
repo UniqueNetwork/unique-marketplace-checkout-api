@@ -33,8 +33,8 @@ import {
   BadRequestResponse,
   NotFoundResponse,
   MassCancelResult,
-  MassFiatSaleDTO,
   MassFiatSaleResultDto,
+  MassFiatSaleDTO,
   MassCancelFiatResult,
 } from './dto';
 import { CollectionsFilterPipe, ParseCollectionIdPipe } from './pipes';
@@ -186,7 +186,7 @@ export class AdminController {
     return await this.fiatSaleService.massFiatSale(data);
   }
 
-  @Delete('/mass-cancel-fiat')
+  @Delete('//collections/mass-cancel-fiat')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Mass cancel fiat',

@@ -3,8 +3,6 @@ export { Bid, BidStatus } from './bid';
 export { TxInfo, TxArgs } from './tx-info';
 export { TokenInfo, CollectionToken, TypeAttributToken, TypeConstSchema, TokenDescription } from './search';
 export { SellingMethod, CurrencyNames } from './offers';
-export { AddTokenType } from './token';
-export { DecodedCollection } from './collection';
 
 export type CalculateArgs = {
   collectionId: number;
@@ -23,14 +21,3 @@ export interface CalculationInfo {
   minBidderAmount: bigint;
   priceStep: bigint;
 }
-
-export type AnyAccountFormat =
-  | string
-  | { address: string }
-  | { Ethereum: string }
-  | { ethereum: string }
-  | { Substrate: string }
-  | { substrate: string }
-  | Object;
-
-export type NormalizedAccountFormat = { Ethereum: string } | { Substrate: string } | any;

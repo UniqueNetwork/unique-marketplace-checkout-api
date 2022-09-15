@@ -9,7 +9,7 @@ import * as logging from '../utils/logging';
 import { AccountPairs, BlockchainBlock, Collection, MarketTrade, MoneyTransfer, NFTTransfer, OffersEntity, SearchIndex } from '@app/entity';
 import { ASK_STATUS, IOfferInsertData, IRegisterTransferData, MONEY_TRANSFER_STATUS, MONEY_TRANSFER_TYPES } from './constants';
 import { CollectionStatus } from '@app/admin/types/collection';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '@app/config/market-config';
 import { CollectionToken, SellingMethod } from '@app/types';
 
 @Injectable()

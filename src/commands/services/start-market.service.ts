@@ -1,104 +1,68 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { MarketConfig } from '@app/config';
+import { Inject, Injectable } from '@nestjs/common';
+import { MarketConfig } from '@app/config/market-config';
 import * as fs from 'fs';
-
-//import dataInfo from 'data.json';
+import { SdkTestService } from '@app/uniquesdk/sdk.service';
 
 @Injectable()
 export class StartMarketService {
   private envLocal: string;
   private projectPath: string;
-  private logger: Logger;
 
-  constructor(@Inject('CONFIG') private config: MarketConfig) {
+  constructor(@Inject('CONFIG') private config: MarketConfig, private sdkUnique: SdkTestService) {
     this.envLocal = `${process.cwd()}/.env-local`;
     this.projectPath = `${process.cwd()}`;
-    this.logger = new Logger('StartMarketService');
+  }
+
+  /**
+   *
+   */
+  async start() {
+    await this.sdkUnique.connect(this.config, 'unique');
+
+    const signer = await this.sdkUnique.convertSeedToSdkSigner(
+      'disease language device hood avoid muffin panther century theory assault tube spring',
+    );
+
+    const payloadAuction = await this.sdkUnique.tranferToken(
+      '5FEc7FEv72ptJZmmgeCUDeaViQvFmVd3y6L4VdmR5N2tHzgd',
+      '5G9RN6hukfQdZrRPq2VzYSDrtSdCA13cTzMej7QPxY5pGEyU',
+      398,
+      12,
+      signer,
+    );
+    console.log(JSON.stringify(payloadAuction.transfer));
+    console.log(payloadAuction);
   }
 
   /**
    *
    */
   async setup() {
-    let data = await this.readFileEnvironment();
-    await this.checkAllVariablesEnv(data);
-
-    data = await this.findArgAndReplace(data, 'AUCTION_SEED2', 'test');
-    await this.saveDataEnv(data);
-  }
-
-  async findArgAndReplace(data: any, key: string, value: string): Promise<string> {
-    let keyData;
-    try {
-      if (data === null || data === undefined) {
-        throw new Error('No data provided');
-      }
-
-      if (key === null || key === undefined) {
-        throw new Error('Set key');
-      } else {
-        keyData = key.toUpperCase();
-      }
-
-      const regexKey = new RegExp(keyData + '=.*$', 'gm');
-      const validateKey = data.match(regexKey);
-      if (validateKey?.length === 0 || validateKey === null) {
-        throw new Error('No matched data');
-      }
-      return data.replace(regexKey, `${keyData}=${value}`);
-    } catch (e) {
-      this.logger.error('No update selected key');
-    }
-  }
-
-  async readFileEnvironment(): Promise<string> {
-    return fs.readFileSync('.env').toString();
-  }
-
-  async saveDataEnv(data: string): Promise<void> {
-    if (data !== undefined) {
-      fs.writeFileSync('.env', data.toString());
-    }
-  }
-
-  async checkAllVariablesEnv(data: string) {
-    const ignoreVar = await this.readIgnoreFile();
-    const ignoreString = ignoreVar.toString().replace(/,/g, '|');
-    const regex = new RegExp(`(?=^.*=[\\s\'\'])^(?!(${ignoreString})).+`, 'gm');
-    const findData = data.match(regex);
-    console.log(findData);
-  }
-
-  private async readIgnoreFile(): Promise<any> {
-    const ignoreList = `${process.cwd()}/.ignorelist`;
-    const list = [];
-    if (!fs.existsSync(ignoreList)) {
-      this.logger.warn('Missing ignore list file in root directory of application');
-      return list;
-    } else {
-      const fileIgnore = fs.readFileSync('.ignorelist').toString().split('\n');
-      fileIgnore.find((keys) => {
-        if (keys !== '') {
-          list.push(keys);
-        }
-      });
-      return list;
-    }
-  }
-
-  async checkEnvFile(): Promise<boolean> {
+    // Env file
     const envDev = `${process.cwd()}/.env`;
+    // Check  env file
+    await this.checkEnvFile(envDev);
+    fs.readFile(envDev, 'utf-8', (err, file) => {
+      const lines = file.split('\n');
+
+      for (const line of lines) console.log(line);
+    });
+  }
+
+  /**
+   *
+   * @param envDev
+   */
+  async checkEnvFile(envDev) {
     if (!fs.existsSync(envDev)) {
       fs.copyFile(this.envLocal, envDev, (err) => {
         if (err) {
-          this.logger.log('Error Found:', err);
-          return false;
+          console.log('Error Found:', err);
         } else {
-          return true;
+          console.log('\nFile Contents of copied_file:', fs.readFileSync(envDev, 'utf8'));
         }
       });
-    } else {
-      return true;
+      console.log('\nFile Contents of copied file:', fs.readFileSync(envDev, 'utf8'));
     }
   }
 

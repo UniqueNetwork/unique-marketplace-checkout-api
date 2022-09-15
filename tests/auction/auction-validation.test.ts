@@ -3,7 +3,7 @@ import request from 'supertest';
 import { AuctionTestEntities, getAuctionTestEntities } from './base';
 import { AuctionCreationService } from '../../src/auction/services/auction-creation.service';
 import { ApiPromise } from '@polkadot/api';
-import { subToEth } from '@app/utils/blockchain/web3s';
+import { subToEth } from '../../src/utils/blockchain/web3';
 
 describe('Auction validation', () => {
   let testEntities: AuctionTestEntities;

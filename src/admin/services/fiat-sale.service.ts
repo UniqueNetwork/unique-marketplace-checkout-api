@@ -1,47 +1,44 @@
-import { Injectable, Inject, HttpStatus, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, HttpStatus, BadRequestException } from '@nestjs/common';
 import { SignatureType } from '@unique-nft/accounts';
 import { KeyringProvider } from '@unique-nft/accounts/keyring';
 import { Repository, DataSource, In } from 'typeorm';
 import { v4 as uuid } from 'uuid';
+import { Sdk } from '@unique-nft/substrate-client';
 
-import { CollectionService } from '@app/database/collection.service';
-import { InjectUniqueSDK, SdkProvider } from '@app/uniquesdk';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '@app/config/market-config';
 import { OffersEntity } from '@app/entity';
 import { ASK_STATUS } from '@app/escrow/constants';
 import { SellingMethod } from '@app/types';
 import { SearchIndexService } from '@app/auction/services/search-index.service';
+import { InjectUniqueSDK } from '@app/uniquesdk';
 
 import { MassFiatSaleDTO, MassFiatSaleResultDto, MassCancelFiatResult } from '../dto';
 
 @Injectable()
 export class FiatSaleService {
-  private logger: Logger;
   private readonly offersRepository: Repository<OffersEntity>;
   constructor(
     private connection: DataSource,
     @Inject('CONFIG') private config: MarketConfig,
-    private readonly collectionService: CollectionService,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
     private readonly searchIndex: SearchIndexService,
+    @InjectUniqueSDK() private readonly unique: Sdk,
   ) {
-    this.logger = new Logger(FiatSaleService.name);
-    this.offersRepository = connection.getRepository(OffersEntity);
+    this.offersRepository = this.connection.getRepository(OffersEntity);
   }
+
   async massFiatSale(data: MassFiatSaleDTO): Promise<MassFiatSaleResultDto> {
-    const collections = await this.collectionService.collections([data.collectionId]);
-    if (collections.length === 0) {
+    const mainAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
+    const { tokens: accountTokens } = await this.unique.tokens.getAccountTokens({
+      collectionId: data.collectionId,
+      address: mainAccount.instance.address,
+    });
+    if (accountTokens.length === 0) {
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
         message: 'The collectionId is not in the collections',
         error: 'The collectionId is not in the collections',
       });
     }
-    const mainAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
-    const { tokens: accountTokens } = await this.uniqueProvider.tokensService.accountTokens(
-      data.collectionId,
-      mainAccount.instance.address,
-    );
     const tokenIdsAcount = data.tokenIds?.length
       ? data.tokenIds.filter((tokenId) => accountTokens.map(({ tokenId }) => tokenId).includes(tokenId)).map((token) => token.toString())
       : accountTokens.map(({ tokenId }) => tokenId.toString());

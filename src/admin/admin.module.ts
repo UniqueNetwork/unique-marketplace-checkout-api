@@ -3,10 +3,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { AdminController } from './admin.controller';
 import { AdminService, CollectionsService, MassCancelingService, MassSaleService, TokenService, FiatSaleService } from './services';
 import { ConfigServiceModule } from '@app/config/module';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '@app/config/market-config';
 import { AuctionModule } from '@app/auction/auction.module';
 import { DatabaseORMModule } from '@app/database/database.module';
-import { HelperService } from '@app/helpers/helper.service';
 
 @Module({
   imports: [
@@ -18,11 +17,12 @@ import { HelperService } from '@app/helpers/helper.service';
       }),
       inject: ['CONFIG'],
     }),
-    DatabaseORMModule,
+
     AuctionModule,
+    DatabaseORMModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService, CollectionsService, MassSaleService, TokenService, MassCancelingService, HelperService, FiatSaleService],
+  providers: [AdminService, CollectionsService, MassSaleService, TokenService, MassCancelingService, FiatSaleService],
   exports: [AdminService, MassSaleService, MassCancelingService, TokenService],
 })
 export class AdminModule {}

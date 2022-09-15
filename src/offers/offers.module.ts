@@ -1,4 +1,3 @@
-import { DatabaseORMModule } from '@app/database/database.module';
 import { Module } from '@nestjs/common';
 
 import { ConfigServiceModule } from '@app/config/module';
@@ -9,7 +8,7 @@ import { OffersService } from './offers.service';
 import { PayOffersService } from './pay.service';
 
 @Module({
-  imports: [DatabaseORMModule, ConfigServiceModule],
+  imports: [ConfigServiceModule],
   controllers: [OffersController],
   providers: [OffersService, OffersFilterService, PayOffersService],
   exports: [OffersService],

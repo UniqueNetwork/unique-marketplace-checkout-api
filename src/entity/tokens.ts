@@ -18,9 +18,6 @@ export class Tokens {
   @Column('jsonb', { name: 'data', default: {} })
   data: string;
 
-  @Column('jsonb', { name: 'nested', default: [] })
-  nested: string;
-
   @Column({
     type: 'timestamp',
     default: () => 'CURRENT_TIMESTAMP',

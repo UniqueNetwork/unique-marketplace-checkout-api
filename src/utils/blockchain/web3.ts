@@ -3,12 +3,10 @@ import { addressToEvm, evmToAddress } from '@polkadot/util-crypto';
 import Web3 from 'web3';
 
 import { signTransaction } from './signTransaction';
-import { HelperService } from '@app/helpers/helper.service';
+import { privateKey, marketABIStaticFile } from './util';
 
-const helper = new HelperService();
-
-const contractHelpersAbi = JSON.parse(helper.marketABIStaticFile('contractHelpersAbi.json'));
-const nonFungibleAbi = JSON.parse(helper.marketABIStaticFile('nonFungibleAbi.json'));
+const contractHelpersAbi = JSON.parse(marketABIStaticFile('contractHelpersAbi.json'));
+const nonFungibleAbi = JSON.parse(marketABIStaticFile('nonFungibleAbi.json'));
 
 enum SponsoringMode {
   Disabled = 0,
@@ -65,7 +63,7 @@ const collectionIdToAddress = (address: number): string => {
 };
 
 const createEthAccountWithBalance = async (api: ApiPromise, web3) => {
-  const alice = helper.privateKey('//Alice');
+  const alice = privateKey('//Alice');
   const account = web3.eth.accounts.create();
   web3.eth.accounts.wallet.add(account.privateKey);
   await transferBalanceToEth(api, alice, account.address);

@@ -6,7 +6,7 @@ module.exports = (request, options) => {
     return;
   }
   if (!modulePath) return;
-  if (request.indexOf('@unique-nft/substrate-client') > -1) {
+  if (request.indexOf('@unique-nft/sdk') > -1) {
     if (modulePath.endsWith('.js')) return `${modulePath.slice(0, -3)}.cjs`;
   }
   if (request.indexOf('@unique-nft/accounts/keyring') > -1) {

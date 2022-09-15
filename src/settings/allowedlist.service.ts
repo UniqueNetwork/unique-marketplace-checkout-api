@@ -1,24 +1,18 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { MarketConfig } from '@app/config';
-import { HelperService } from '@app/helpers/helper.service';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../uniquesdk/sdk-provider';
+import { MarketConfig } from '../config/market-config';
+import * as lib from '../utils/blockchain/web3';
+import * as util from '../utils/blockchain/util';
+import { SdkStateService } from '@app/uniquesdk/sdk-state.service';
 
 @Injectable()
 export class AllowedListService {
+  private web3conn;
   private web3;
   private contractOwner;
   private logger: Logger;
 
-  constructor(
-    @Inject('CONFIG') private config: MarketConfig,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
-    private web3conn: Web3Service,
-    private helper: HelperService,
-  ) {
-    this.web3 = this.web3conn.web3;
-
+  constructor(@Inject('CONFIG') private config: MarketConfig, private sdkState: SdkStateService) {
+    this.sdkState.connect('unique');
     this.logger = new Logger(AllowedListService.name);
   }
 
@@ -34,6 +28,8 @@ export class AllowedListService {
       new Error('No CONTRACT_OWNER_SEED provided enverionment variable');
       return;
     }
+    this.web3conn = lib.connectWeb3(this.config.blockchain.unique.wsEndpoint);
+    this.web3 = this.web3conn.web3;
     this.contractOwner = this.web3.eth.accounts.privateKeyToAccount(this.config.blockchain.unique.contractOwnerSeed);
   }
 
@@ -46,17 +42,17 @@ export class AllowedListService {
     // Contract address is the address of the market contract
     const contractAddress = this.config.blockchain.unique.contractAddress;
     // Web3 contract
-    const helpers = this.web3conn.contractHelpers(this.web3, this.contractOwner.address);
+    const helpers = lib.contractHelpers(this.web3, this.contractOwner.address);
     // Contract
     const contract = new this.web3.eth.Contract(this.getMarketAbi(), contractAddress);
     // Substrate address to ethers address
-    const ethAddress = this.web3conn.subToEth(address);
+    const ethAddress = lib.subToEth(address);
     if (this.web3.eth.accounts.wallet.length === 0) {
       this.web3.eth.accounts.wallet.add(this.contractOwner.privateKey);
     }
 
     //Check if address is already in the list
-    const isAllowed = (await this.uniqueProvider.stateService.allowlist(contractAddress, ethAddress)).json;
+    const isAllowed = (await this.sdkState.allowlist(contractAddress, ethAddress)).json;
     if (!isAllowed) {
       try {
         await helpers.methods.toggleAllowed(contract.options.address, ethAddress, true).send({ from: this.contractOwner.address });
@@ -85,6 +81,6 @@ export class AllowedListService {
   }
 
   getMarketAbi() {
-    return JSON.parse(this.helper.marketABIStaticFile('MarketPlace.abi'));
+    return JSON.parse(util.marketABIStaticFile('MarketPlace.abi'));
   }
 }

@@ -3,14 +3,14 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import * as fs from 'fs';
 
 import { OffersService } from './offers.service';
-import { PayOffersService } from './pay.service';
-import { OfferTraits, OfferEntityDto, OffersFilter, OfferAttributesDto, OfferAttributes, PayOfferDto, PayOfferResponseDto } from './dto';
+import { OfferTraits, OfferEntityDto, OffersFilter, OfferAttributesDto, OfferAttributes, PayOfferResponseDto, PayOfferDto } from './dto';
 import { ParseOffersFilterPipe, ParseOffersAttributes } from './pipes';
 
 import { PaginationRequest } from '../utils/pagination/pagination-request';
 import { PaginationResultDto } from '../utils/pagination/pagination-result';
 import { OfferSortingRequest } from '../utils/sorting/sorting-request';
 import { TraceInterceptor } from '../utils/sentry';
+import { PayOffersService } from './pay.service';
 
 @ApiTags('Offers')
 @Controller()

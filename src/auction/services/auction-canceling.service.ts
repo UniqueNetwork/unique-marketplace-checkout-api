@@ -1,19 +1,17 @@
-import { BadRequestException, HttpStatus, Inject, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Logger, HttpStatus } from '@nestjs/common';
 import { DataSource, FindOperator, Not, Repository } from 'typeorm';
 import { encodeAddress } from '@polkadot/util-crypto';
-import { KeyringProvider } from '@unique-nft/accounts/keyring';
-import { SignatureType } from '@unique-nft/accounts';
 
 import { AuctionBidEntity, BlockchainBlock, OffersEntity } from '@app/entity';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '@app/config/market-config';
 import { OfferEntityDto } from '@app/offers/dto/offer-dto';
 import { ASK_STATUS } from '@app/escrow/constants';
+import { NetworkName, SdkExtrinsicService, SdkTransferService } from '@app/uniquesdk';
 
 import { DatabaseHelper } from './helpers/database-helper';
 import { AuctionStatus, BidStatus } from '@app/types';
+import { AuctionCredentials } from '../providers';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
-import { InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 type AuctionCancelArgs = {
   collectionId: number;
@@ -23,14 +21,17 @@ type AuctionCancelArgs = {
 
 export class AuctionCancelingService {
   private readonly logger = new Logger(AuctionCancelingService.name);
+
   private readonly blockchainBlockRepository: Repository<BlockchainBlock>;
   private readonly offersRepository: Repository<OffersEntity>;
 
   constructor(
     private connection: DataSource,
     @Inject('CONFIG') private config: MarketConfig,
+    @Inject('AUCTION_CREDENTIALS') private auctionCredentials: AuctionCredentials,
+    private readonly sdkExtrinsicService: SdkExtrinsicService,
+    private readonly sdkTransferService: SdkTransferService,
     @InjectSentry() private readonly sentryService: SentryService,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
   ) {
     this.offersRepository = connection.getRepository(OffersEntity);
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
@@ -113,17 +114,19 @@ export class AuctionCancelingService {
   async sendTokenBackToOwner(OffersEntity: OffersEntity): Promise<void> {
     try {
       const { address_from, collection_id, token_id } = OffersEntity;
+      const auctionKeyring = this.auctionCredentials.keyring;
 
-      const auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
-
-      const { blockNumber, blockHash, isError } = await this.uniqueProvider.transferService.transferToken(
-        auctionAccount,
+      const tx = await this.sdkTransferService.transferOneTokenNextIndex(
+        auctionKeyring,
         address_from,
-        parseInt(collection_id),
-        parseInt(token_id),
+        collection_id,
+        token_id,
+        NetworkName.UNIQUE,
       );
 
-      if (isError) {
+      const { blockNumber, isSucceed, blockHash } = await this.sdkExtrinsicService.submit(tx, NetworkName.UNIQUE);
+
+      if (!isSucceed) {
         this.logger.warn(`Failed at block # ${blockNumber} (${blockHash.toHex()})`);
         throw new BadRequestException({
           statusCode: HttpStatus.CONFLICT,
@@ -155,8 +158,8 @@ export class AuctionCancelingService {
         address_from_n42: encodeAddress(address_from),
         collection: collection_id,
         token: token_id,
-        auction_seed: auctionAccount.instance.address,
-        auction_seed_n42: encodeAddress(auctionAccount.instance.address),
+        auction_seed: auctionKeyring.address,
+        auction_seed_n42: encodeAddress(auctionKeyring.address),
         network: this.config.blockchain.unique.network,
         block_number: block.block_number,
       };

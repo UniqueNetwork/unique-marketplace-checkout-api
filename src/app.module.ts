@@ -20,7 +20,6 @@ import { OffersModule } from '@app/offers/offers.module';
 import { SettingsModule } from '@app/settings/settings.module';
 import { AdminModule } from '@app/admin/admin.module';
 import { DatabaseORMModule } from '@app/database/database.module';
-import { HelperService } from './helpers/helper.service';
 
 @Module({
   imports: [
@@ -47,7 +46,7 @@ import { HelperService } from './helpers/helper.service';
     AdminModule,
   ],
   controllers: [HealthController, MetricsController],
-  providers: [HealthService, MetricsService, PrometheusService, HelperService],
+  providers: [HealthService, MetricsService, PrometheusService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): any {

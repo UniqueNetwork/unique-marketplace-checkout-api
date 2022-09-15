@@ -2,7 +2,7 @@ import { BadRequestException, HttpStatus, Injectable, Logger } from '@nestjs/com
 import { InjectSentry, SentryService } from '../utils/sentry';
 import { DataSource, SelectQueryBuilder } from 'typeorm';
 import { OffersService } from './offers.service';
-import { ContractAsk, OfferFilters, SearchIndex } from '../entity';
+import { ContractAsk, OfferFilters } from '../entity';
 import { OfferAttributes } from './dto/offer-attributes';
 import { OffersFilter, OfferTraits, TraitDto } from './dto';
 import { PaginationRequest } from '../utils/pagination/pagination-request';
@@ -11,18 +11,13 @@ import { OffersQuerySortHelper } from './offers-query-sort-helper';
 import { priceTransformer } from '../utils/price-transformer';
 import { nullOrWhitespace } from '../utils/string/null-or-white-space';
 import { SellingMethod } from '@app/types';
-import { BundleService } from '@app/database/bundle.service';
 
 @Injectable()
 export class OffersFilterService {
   private logger: Logger;
   private readonly offersQuerySortHelper: OffersQuerySortHelper;
 
-  constructor(
-    private connection: DataSource,
-    @InjectSentry() private readonly sentryService: SentryService,
-    private readonly bundleService: BundleService,
-  ) {
+  constructor(private connection: DataSource, @InjectSentry() private readonly sentryService: SentryService) {
     this.logger = new Logger(OffersService.name);
     this.offersQuerySortHelper = new OffersQuerySortHelper(connection);
   }
@@ -369,16 +364,11 @@ export class OffersFilterService {
 
   public async filterByOne(collectionId: number, tokenId: number): Promise<any> {
     let queryFilter = this.connection.manager.createQueryBuilder(OfferFilters, 'v_offers_search');
-    const bundle = await this.bundle(collectionId, tokenId);
-    queryFilter = this.byCollectionTokenId(queryFilter, bundle.collectionId, bundle.tokenId);
+    queryFilter = this.byCollectionTokenId(queryFilter, collectionId, tokenId);
     queryFilter = this.prepareQuery(queryFilter);
     const itemQuery = this.pagination(queryFilter, { page: 1, pageSize: 1 });
     const items = await itemQuery.query.getRawMany();
     return items;
-  }
-
-  public async bundle(collectionId: number, tokenId: number): Promise<{ collectionId: number; tokenId: number }> {
-    return this.bundleService.bundle(collectionId, tokenId);
   }
 
   public async filter(offersFilter: OffersFilter, pagination: PaginationRequest, sort: OfferSortingRequest): Promise<any> {

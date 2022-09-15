@@ -1,11 +1,11 @@
 import { BadRequestException, HttpStatus, Injectable, Logger, Inject } from '@nestjs/common';
 import { Checkout } from 'checkout-sdk-node';
-import { Repository, DataSource, In } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { SignatureType } from '@unique-nft/accounts';
 import { KeyringProvider } from '@unique-nft/accounts/keyring';
 
-import { InjectUniqueSDK, SdkProvider } from '@app/uniquesdk';
-import { MarketConfig } from '@app/config';
+import { SdkTransferService } from '@app/uniquesdk';
+import { MarketConfig } from '@app/config/market-config';
 import { OffersEntity } from '@app/entity';
 import { ASK_STATUS } from '@app/escrow/constants';
 
@@ -31,7 +31,7 @@ export class PayOffersService {
   constructor(
     private connection: DataSource,
     @Inject('CONFIG') private config: MarketConfig,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
+    private readonly sdkTransferService: SdkTransferService,
   ) {
     this.logger = new Logger(PayOffersService.name);
     this.offersRepository = connection.getRepository(OffersEntity);
@@ -104,7 +104,7 @@ export class PayOffersService {
       });
     }
 
-    const { isError } = await this.uniqueProvider.transferService.transferToken(
+    const { isError } = await this.sdkTransferService.transferToken(
       mainAccount,
       input.buyerAddress,
       parseInt(offer.collection_id),

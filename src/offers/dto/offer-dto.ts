@@ -5,7 +5,7 @@ import { Exclude, Expose, plainToInstance, Type } from 'class-transformer';
 import { AuctionOffer } from '../../types/auction';
 
 export class AuctionDto implements AuctionOffer {
-  @Exclude() @ApiProperty({ example: 'afb625bf-d9b0-4f41-98d0-ae88814744f9' }) id: string;
+  @Exclude() id: string;
   @Exclude() createdAt: Date;
   @Exclude() updatedAt: Date;
 
@@ -16,7 +16,7 @@ export class AuctionDto implements AuctionOffer {
 
   @Expose()
   @Type(() => BidDto)
-  bids?: BidDto[];
+  bids: BidDto[];
 }
 
 class BidDto implements Bid {
@@ -39,21 +39,7 @@ export class TokenDescriptionDto {
   @Expose() @ApiProperty({ example: 'TEST' }) prefix: string;
   @Expose() @ApiProperty({ example: 'Test collection' }) description: string;
   @Expose() collectionCover: string;
-  @Expose() @ApiProperty({ example: '5CSxpZepJj5dxkSBEDnN23pgg6B5X6VFRJ2kyubhb5Svstuu' }) owner: string;
-  @Expose() collectionId: number;
-  @Expose() @ApiProperty({ example: '1' }) tokenId: string;
   @Expose() attributes: Array<TokenDescription>;
-  @Expose() nestingChildTokens: Array<any>;
-}
-
-export class CollectionDescriptionDto {
-  @Expose() @ApiProperty({ example: 'NFT' }) mode: string;
-  @Expose() @ApiProperty({ example: 'Test' }) name: string;
-  @Expose() @ApiProperty({ example: 'Test collection' }) description: string;
-  @Expose() @ApiProperty({ example: 'NFT' }) tokenPrefix: string;
-  @Expose() id: number;
-  @Expose() owner: string;
-  @Expose() schema: any;
 }
 
 export class OfferEntityDto {
@@ -94,11 +80,6 @@ export class OfferEntityDto {
   @Expose()
   @Type(() => TokenDescriptionDto)
   tokenDescription: TokenDescriptionDto;
-
-  @ApiProperty({ description: 'Collection description' })
-  @Expose()
-  @Type(() => CollectionDescriptionDto)
-  collectionDescription: CollectionDescriptionDto;
 
   static fromOffersEntity(offersData: OffersEntity): OfferEntityDto {
     const plain: Record<string, any> = {

@@ -1,17 +1,12 @@
 import { EscrowService } from './service';
 import * as logging from '../utils/logging';
 import { delay } from '../utils/delay';
-import { HelperService } from '@app/helpers/helper.service';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { SdkProvider } from '../uniquesdk/sdk-provider';
 import { Sdk } from '@unique-nft/substrate-client';
 
 export class Escrow {
   static MODE_PROD = 'prod';
   static MODE_TESTING = 'testing';
-  helperService = new HelperService();
   api;
-  web3conn;
   admin;
   configObj;
   configMode;
@@ -20,12 +15,11 @@ export class Escrow {
   service: EscrowService;
   SECTION_TIMESTAMP = 'timestamp';
 
-  constructor(config, service: EscrowService, sdk: Sdk, web3Service: Web3Service, mode = Escrow.MODE_PROD) {
+  constructor(config, service: EscrowService, sdk: Sdk, mode = Escrow.MODE_PROD) {
     this.configObj = config;
     this.service = service;
     this.configMode = mode;
     this.api = sdk.api;
-    this.web3conn = web3Service;
     this.store = {
       currentBlock: 0,
       latestBlock: 0,

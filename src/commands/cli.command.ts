@@ -45,16 +45,7 @@ export class CliCommands {
     describe: 'Deploy market for start',
   })
   async deployMarket() {
-    await this.startMarketService.setup();
-    await this.startMarketService.destroy();
-  }
-
-  @Command({
-    command: 'startmarket',
-    describe: 'Start market for start',
-  })
-  async startMarket() {
-    await this.startMarketService.setup();
+    await this.startMarketService.start();
     await this.startMarketService.destroy();
   }
 

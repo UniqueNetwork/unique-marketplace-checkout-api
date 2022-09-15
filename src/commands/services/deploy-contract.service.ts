@@ -1,32 +1,29 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { MarketConfig } from '@app/config';
+import * as lib from '@app/utils/blockchain/web3';
+import { MarketConfig } from '@app/config/market-config';
 import { evmToAddress } from '@polkadot/util-crypto';
+import * as util from '@app/utils/blockchain/util';
 import * as logging from '@app/utils/logging';
 import { signTransaction, TransactionStatus } from '@app/utils/blockchain';
-import { InjectUniqueSDK, SdkProvider } from '@app/uniquesdk';
-import { HelperService } from '@app/helpers/helper.service';
-import { SponsoringMode, WEB3_GAS_ARGS, WEB3_UNIQUE } from '@app/uniquesdk';
-import { Web3Service } from '@app/uniquesdk/web3.service';
-import { ApiPromise } from '@polkadot/api';
+import { InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
+import { Sdk } from '@unique-nft/substrate-client';
 
 @Injectable()
 export class DeployContractService {
-  private helperService = new HelperService();
   private summary: string[] = [];
-  private api: ApiPromise;
+  private web3conn;
+  private api;
   private web3;
   private ownerSeed: string;
 
-  private DEPLOY_COST = 9n * WEB3_UNIQUE;
-  private CONTRACT_MIN_BALANCE = 40n * WEB3_UNIQUE;
-  private ESCROW_MIN_BALANCE = (5n * WEB3_UNIQUE) / 10n;
+  private DEPLOY_COST = 9n * lib.UNIQUE;
+  private CONTRACT_MIN_BALANCE = 40n * lib.UNIQUE;
+  private ESCROW_MIN_BALANCE = (5n * lib.UNIQUE) / 10n;
 
-  constructor(
-    @Inject('CONFIG') private config: MarketConfig,
-    @InjectUniqueSDK() private readonly uniqueSdk: SdkProvider,
-    private web3conn: Web3Service,
-  ) {
-    this.web3 = web3conn.web3;
+  constructor(@Inject('CONFIG') private config: MarketConfig, @InjectUniqueSDK() private readonly uniqueSdk: Sdk) {
+    this.web3conn = lib.connectWeb3(config.blockchain.unique.wsEndpoint);
+
+    this.web3 = this.web3conn.web3;
     this.ownerSeed = config.blockchain.unique.contractOwnerSeed;
   }
 
@@ -40,7 +37,7 @@ export class DeployContractService {
     }
 
     logging.log(['WS endpoint:', this.config.blockchain.unique.wsEndpoint]);
-    this.api = this.uniqueSdk.sdk.api;
+    this.api = this.uniqueSdk.api;
   }
 
   /**
@@ -55,15 +52,17 @@ export class DeployContractService {
    * @private
    */
   private async disconnect() {
+    const api = await this.api;
     if (this.summary.length) {
       console.log(`\n\n\nSUMMARY:\n\n${this.summary.join('\n')}`);
     }
-    this.web3conn.disconnect();
-    await this.api.disconnect();
+    this.web3conn.provider.connection.close();
+    await api.disconnect();
     process.exit(0);
   }
   private async getBalance(address) {
-    return ((await this.api.query.system.account(address)) as any).data.free.toBigInt();
+    const api = await this.api;
+    return ((await api.query.system.account(address)) as any).data.free.toBigInt();
   }
   private async addSubstrateMirror(address) {
     this.summary.push(`\n\nSubstrate mirror of contract address (for balances): ${evmToAddress(address)}`);
@@ -74,7 +73,8 @@ export class DeployContractService {
    * Deploy the contract.
    */
   async deploy() {
-    const escrow = this.helperService.privateKey(this.config.blockchain.escrowSeed);
+    const api = await this.api;
+    const escrow = util.privateKey(this.config.blockchain.escrowSeed);
 
     logging.log(['Escrow substrate address:', escrow.address]);
     {
@@ -93,7 +93,7 @@ export class DeployContractService {
 
       const result = await signTransaction(
         escrow,
-        this.api.tx.balances.transfer(evmToAddress(account.address), this.DEPLOY_COST),
+        api.tx.balances.transfer(evmToAddress(account.address), this.DEPLOY_COST),
         'api.tx.balances.transfer',
       );
       if (result.status !== TransactionStatus.SUCCESS) {
@@ -135,25 +135,25 @@ export class DeployContractService {
     const account = this.web3.eth.accounts.privateKeyToAccount(this.ownerSeed);
     this.web3.eth.accounts.wallet.add(account.privateKey);
 
-    const contractAbi = new this.web3.eth.Contract(JSON.parse(this.helperService.marketABIStaticFile('MarketPlace.abi')), undefined, {
+    const contractAbi = new this.web3.eth.Contract(JSON.parse(util.marketABIStaticFile('MarketPlace.abi')), undefined, {
       from: account.address,
-      ...WEB3_GAS_ARGS,
+      ...lib.GAS_ARGS,
     });
     const contract = await contractAbi
-      .deploy({ data: this.helperService.marketABIStaticFile('MarketPlace.bin') })
+      .deploy({ data: util.marketABIStaticFile('MarketPlace.bin') })
       .send({ from: account.address, gas: 5_000_000 });
     logging.log('Set escrow...');
     await contract.methods.setEscrow(account.address, true).send({ from: account.address });
-    const helpers = this.web3conn.contractHelpers(this.web3, account.address);
+    const helpers = lib.contractHelpers(this.web3, account.address);
     logging.log('Set sponsoring mode...');
     // await helpers.methods.toggleSponsoring(contract.options.address, true).send({from: account.address});
-    await helpers.methods.setSponsoringMode(contract.options.address, SponsoringMode.Allowlisted).send({ from: account.address });
+    await helpers.methods.setSponsoringMode(contract.options.address, lib.SponsoringMode.Allowlisted).send({ from: account.address });
     logging.log('Set sponsoring rate limit...');
     await helpers.methods.setSponsoringRateLimit(contract.options.address, 0).send({ from: account.address });
     logging.log('Transfer balance...');
     const result = await signTransaction(
       escrow,
-      this.api.tx.balances.transfer(evmToAddress(contract.options.address), this.CONTRACT_MIN_BALANCE),
+      api.tx.balances.transfer(evmToAddress(contract.options.address), this.CONTRACT_MIN_BALANCE),
       'api.tx.balances.transfer',
     );
     if (result.status !== TransactionStatus.SUCCESS) {

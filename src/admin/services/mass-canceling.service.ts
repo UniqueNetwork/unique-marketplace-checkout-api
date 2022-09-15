@@ -3,7 +3,7 @@ import { DataSource, In, Not, Repository } from 'typeorm';
 import { Keyring } from '@polkadot/api';
 import { KeyringPair } from '@polkadot/keyring/types';
 import { Collection, OffersEntity } from '../../entity';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '../../config/market-config';
 import { AuctionStatus, SellingMethod } from '../../types';
 import { ASK_STATUS } from '../../escrow/constants';
 import { MassCancelResult } from '../dto';

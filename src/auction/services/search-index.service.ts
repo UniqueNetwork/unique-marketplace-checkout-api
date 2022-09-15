@@ -1,58 +1,36 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
-import { MarketConfig } from '@app/config';
-import { Collection, SearchIndex } from '@app/entity';
+import { MarketConfig } from '@app/config/market-config';
+import { SearchIndex } from '@app/entity';
 
 import { v4 as uuid } from 'uuid';
 import { CollectionToken, TokenInfo, TypeAttributToken } from '@app/types';
 
 import '@polkadot/api-augment/polkadot';
-import { CollectionInfoWithSchema, TokenByIdResult } from '@unique-nft/substrate-client/tokens';
-
-import { TokenService } from '@app/database/token.service';
-import { CollectionService } from '@app/database/collection.service';
-import { InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
-import { BundleType } from '@app/uniquesdk/sdk-tokens.service';
-
-type SerializeTokenType = {
-  items: TokenInfo[];
-  token: TokenByIdResult;
-  collection: CollectionInfoWithSchema;
-  serializeBunlde: Array<BundleType>;
-};
-
-type AddTokenType = {
-  collectionId: number;
-  tokenId: number;
-  owner: string;
-  data: string;
-};
+import { Sdk } from '@unique-nft/substrate-client';
+import { InjectUniqueSDK, SdkCollectionService, SdkTokensService } from '@app/uniquesdk';
 
 @Injectable()
 export class SearchIndexService {
   private network: string;
   private repository: Repository<SearchIndex>;
-  private readonly collectionsRepository: Repository<Collection>;
   private readonly logger = new Logger(SearchIndexService.name);
 
   private BLOCKED_SCHEMA_KEYS = ['ipfsJson'];
 
   constructor(
     private connection: DataSource,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
-    private tokenDB: TokenService,
-    private collectionDB: CollectionService,
+    private sdkCollections: SdkCollectionService,
+    private sdkTokens: SdkTokensService,
+    @InjectUniqueSDK() private uniqueApi: Sdk,
     @Inject('CONFIG') private config: MarketConfig,
   ) {
     this.network = this.config.blockchain.unique.network;
     this.repository = connection.getRepository(SearchIndex);
+    this.sdkTokens.connect('unique');
+    this.sdkCollections.connect('unique');
   }
-  /**
-   * If token is not exist in database, get token from unique api and save to database
-   * @param {CollectionToken} collectionToken token in collection
-   * @returns {Promise<SearchIndex[]>} Array of token info
-   */
+
   async addSearchIndexIfNotExists(collectionToken: CollectionToken): Promise<SearchIndex[]> {
     const dbIndex = await this.repository.find({
       where: {
@@ -65,22 +43,14 @@ export class SearchIndexService {
     const searchIndexItems = await this.getTokenInfoItems(collectionToken);
     return this.saveSearchIndex(collectionToken, searchIndexItems);
   }
-  /**
-   * Get value from attribute of token
-   * @param attribute
-   * @returns {string} Array of value
-   */
+
   private getValueToken(attribute: any): Array<string> {
     if (Array.isArray(attribute.value)) {
       return attribute.value.map((item) => item._);
     }
     return attribute.value._ ? [attribute.value._] : [attribute.value];
   }
-  /**
-   * Get location from attribute of token
-   * @param attribute
-   * @returns {string}
-   */
+
   private getLocation(attribute: any): string | null {
     if (Array.isArray(attribute.value)) {
       return [
@@ -103,24 +73,10 @@ export class SearchIndexService {
     }
   }
 
-  /**
-   * Save token to database
-   * @param {TokenByIdResult} token token from sdk
-   * @returns {void}
-   */
-  async serializeTokenSave(token: TokenByIdResult, nested: Array<BundleType>): Promise<boolean> {
-    return this.tokenDB.save({
-      collectionId: token.collectionId,
-      tokenId: token.tokenId,
-      owner: token.owner,
-      data: token as any,
-      nested: nested as any,
-    });
-  }
-
   async prepareSearchIndex(tokenId: number, collectionId: number): Promise<any> {
-    const tokenData = await this.uniqueProvider.tokenWithCollection(tokenId, collectionId);
+    const tokenData = await this.sdkTokens.tokenWithCollection(tokenId, collectionId);
     const source = new Set();
+
     // Collection
     source
       .add({
@@ -191,20 +147,17 @@ export class SearchIndexService {
     }
 
     return {
-      items: [...source],
+      source: [...source],
       token: tokenData.token,
-      collection: tokenData.collection,
-      serializeBunlde: tokenData.serializeBunlde,
     };
   }
 
-  async getTokenInfoItems({ collectionId, tokenId }: CollectionToken): Promise<SerializeTokenType> {
+  async getTokenInfoItems({ collectionId, tokenId }: CollectionToken): Promise<TokenInfo[]> {
     const source = await this.prepareSearchIndex(tokenId, collectionId);
-    return source;
+    return source.source;
   }
 
-  async saveSearchIndex(collectionToken: CollectionToken, source: SerializeTokenType): Promise<SearchIndex[]> {
-    const items = source.items;
+  async saveSearchIndex(collectionToken: CollectionToken, items: TokenInfo[]): Promise<SearchIndex[]> {
     const total = items
       .filter(
         (i) =>
@@ -216,9 +169,6 @@ export class SearchIndexService {
       }, 0);
 
     const listItems = this.setListItems(items);
-
-    await this.serializeTokenSave(source.token, source.serializeBunlde);
-    await this.collectionDB.save(source.collection);
 
     const searchIndexItems: SearchIndex[] = items.map((item) =>
       this.repository.create({
@@ -234,8 +184,6 @@ export class SearchIndexService {
         count_item: this.setCountItem(item),
         total_items: total,
         list_items: listItems,
-        attributes: source.token as any,
-        nested: source.serializeBunlde as any,
       }),
     );
 

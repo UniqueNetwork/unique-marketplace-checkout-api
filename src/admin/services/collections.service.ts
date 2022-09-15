@@ -1,33 +1,27 @@
 import '@polkadot/api-augment/polkadot';
 import { HttpStatus, Inject, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { MarketConfig } from '@app/config';
+import { MarketConfig } from '@app/config/market-config';
 import { DataSource, Repository } from 'typeorm';
 import { green, red, yellow } from 'cli-color';
-import { CollectionImportType, CollectionStatus, ImportByIdResult } from '../types';
+import { CollectionImportType, CollectionStatus, DecodedCollection, ImportByIdResult } from '../types';
 import { CollectionsFilter, DisableCollectionResult, EnableCollectionResult, ListCollectionResult } from '../dto';
-import { Collection, OffersEntity } from '@app/entity';
+import { Collection } from '@app/entity';
+import { SdkCollectionService } from '@app/uniquesdk/sdk-collections.service';
 import { CollectionMode } from '@unique-nft/substrate-client/tokens';
-
-import { DecodedCollection } from '@app/types';
-import { CollectionService as CollectionDB } from '@app/database/collection.service';
-import { InjectUniqueSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 @Injectable()
 export class CollectionsService implements OnModuleInit {
   private readonly collectionsRepository: Repository<Collection>;
-  private readonly offersRepository: Repository<OffersEntity>;
   private readonly logger: Logger;
 
   constructor(
     private connection: DataSource,
-    private collectionDB: CollectionDB,
-    @InjectUniqueSDK() private readonly uniqueProvider: SdkProvider,
+    private sdkCollections: SdkCollectionService,
     @Inject('CONFIG') private config: MarketConfig,
   ) {
     this.collectionsRepository = connection.getRepository(Collection);
-    this.offersRepository = connection.getRepository(OffersEntity);
     this.logger = new Logger(CollectionsService.name, { timestamp: true });
+    this.sdkCollections.connect('unique');
   }
 
   /**
@@ -58,19 +52,18 @@ export class CollectionsService implements OnModuleInit {
    * @return ({Promise<ImportByIdResult>})
    */
   async importById(id: number, importType: CollectionImportType): Promise<ImportByIdResult> {
-    const collectionNew = await this.uniqueProvider.collectionsService.collectionById(id);
+    const collectionNew = await this.sdkCollections.collectionById(id);
     const decoded: DecodedCollection = {
       owner: collectionNew?.owner,
       mode: collectionNew?.mode as CollectionMode,
       tokenPrefix: collectionNew?.tokenPrefix,
       name: collectionNew?.name,
-      importType: CollectionImportType.Api,
       description: collectionNew?.description,
       data: collectionNew,
     };
 
     const entity = this.collectionsRepository.create(decoded);
-    const existing = await this.collectionDB.byId(id);
+    const existing = await this.findById(id);
 
     if (existing) {
       try {
@@ -111,7 +104,7 @@ export class CollectionsService implements OnModuleInit {
     const { collection } = await this.importById(id, CollectionImportType.Api);
 
     await this.collectionsRepository.update(id, { status: CollectionStatus.Enabled });
-    await this.offersRepository.update({ collection_id: collection.id, status: 'removed_by_admin' }, { status: 'active' });
+
     const message =
       collection.status === CollectionStatus.Enabled ? `Collection #${id} has already enabled` : `Collection #${id} successfully enabled`;
 
@@ -128,10 +121,10 @@ export class CollectionsService implements OnModuleInit {
    * @return ({Promise<DisableCollectionResult>})
    */
   async disableById(id: number): Promise<DisableCollectionResult> {
-    const collection = await this.collectionDB.byId(id);
+    const collection = await this.collectionsRepository.findOne({ where: { id: id.toString() } });
 
     if (!collection) throw new NotFoundException(`Collection #${id} not found`);
-    await this.offersRepository.update({ collection_id: collection.id, status: 'active' }, { status: 'removed_by_admin' });
+
     const message =
       collection.status === CollectionStatus.Disabled
         ? `Collection #${collection.id} has already disabled`
@@ -153,11 +146,20 @@ export class CollectionsService implements OnModuleInit {
    * @return ({Promise<void>})
    */
   async updateAllowedTokens(id: number, tokens: string): Promise<void> {
-    const collection = await this.collectionDB.byId(id);
+    const collection = await this.collectionsRepository.findOne({ where: { id: id.toString() } });
 
     if (!collection) throw new NotFoundException(`Collection #${id} not found`);
 
     await this.collectionsRepository.update(id, { allowedTokens: tokens });
+  }
+
+  /**
+   * Find collection by ID in database
+   * @param {Number} id - collection id
+   * @return ({Promise<Collection>})
+   */
+  async findById(id: number): Promise<Collection> {
+    return await this.collectionsRepository.findOne({ where: { id: id.toString() } });
   }
 
   /**

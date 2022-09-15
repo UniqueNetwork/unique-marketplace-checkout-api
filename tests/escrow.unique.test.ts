@@ -5,11 +5,16 @@ import { IKeyringPair } from '@polkadot/types/types';
 import { ApiPromise } from '@polkadot/api';
 import { Connection } from 'typeorm';
 
+import * as lib from '../src/utils/blockchain/web3';
+import * as unique from '../src/utils/blockchain/unique';
+import * as util from '../src/utils/blockchain/util';
+import { UniqueExplorer, convertAddress } from '../src/utils/blockchain/util';
+import { initApp, runMigrations } from './data';
 import { EscrowService } from '../src/escrow/service';
 import { UniqueEscrow } from '../src/escrow';
 import { MONEY_TRANSFER_STATUS } from '../src/escrow/constants';
 import { ConstDataPlayload, TraitsSchema } from './data/escrow.data';
-
+import { encodeData } from '../src/utils/blockchain/token';
 import { signTransaction } from '../src/utils/blockchain';
 import { CollectionsService } from '../src/admin/services/collections.service';
 import { CollectionImportType } from '../src/admin/types';

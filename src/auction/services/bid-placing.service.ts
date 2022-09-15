@@ -7,13 +7,12 @@ import { encodeAddress } from '@polkadot/util-crypto';
 import { BroadcastService } from '@app/broadcast/services/broadcast.service';
 import { MONEY_TRANSFER_STATUS, MONEY_TRANSFER_TYPES } from '@app/escrow/constants';
 import { AuctionBidEntity, MoneyTransfer, OffersEntity } from '@app/entity';
+import { SdkExtrinsicService, NetworkName, SdkStateService } from '@app/uniquesdk';
 
-import { OfferEntityDto } from '@app/offers/dto/offer-dto';
-import { AuctionStatus, BidStatus, CalculateArgs, CalculationInfo, PlaceBidArgs } from '@app/types';
+import { OfferEntityDto } from '../../offers/dto/offer-dto';
+import { AuctionStatus, BidStatus, CalculateArgs, CalculationInfo, PlaceBidArgs } from '../../types';
 import { DatabaseHelper } from './helpers/database-helper';
 import { PlaceBidRequestDto } from '../requests/place-bid';
-import { InjectKusamaSDK } from '@app/uniquesdk';
-import { SdkProvider } from '../../uniquesdk/sdk-provider';
 
 @Injectable()
 export class BidPlacingService {
@@ -25,21 +24,16 @@ export class BidPlacingService {
 
   constructor(
     private connection: DataSource,
-    @InjectKusamaSDK() private readonly kusamaProvider: SdkProvider,
     private broadcastService: BroadcastService,
+    private sdkState: SdkStateService,
+    private readonly sdkExtrinsicService: SdkExtrinsicService,
   ) {
     this.offersRepository = connection.manager.getRepository(OffersEntity);
     this.bidRepository = connection.manager.getRepository(AuctionBidEntity);
     this.moneyTransferRepository = connection.getRepository(MoneyTransfer);
+    this.sdkState.connect('kusama');
   }
 
-  /**
-   * @async
-   * Places bid for auction
-   * @description Data is build via SDK, signature is created and signerPayloadJSON
-   * @param placeBidArgs
-   * @returns {Promise<OfferEntityDto>}
-   */
   async placeBid(placeBidArgs: PlaceBidRequestDto): Promise<OfferEntityDto> {
     let offers: OffersEntity;
     let nextUserBid: AuctionBidEntity;
@@ -50,7 +44,7 @@ export class BidPlacingService {
       isCompleted,
       isError,
       transferData: { sender, amount },
-    } = await this.kusamaProvider.transferService.transferBalance(placeBidArgs.signerPayloadJSON, placeBidArgs.signature);
+    } = await this.sdkExtrinsicService.transferBalance(placeBidArgs.signerPayloadJSON, placeBidArgs.signature, NetworkName.KUSAMA);
 
     const bidArgs = {
       collectionId: placeBidArgs.collectionId,
@@ -85,14 +79,6 @@ export class BidPlacingService {
     }
   }
 
-  /**
-   * @async
-   * @param placeBidArgs
-   * @param oldOffer
-   * @param userBid
-   * @param blockNumber
-   * @private
-   */
   private async handleBidTxSuccess(
     placeBidArgs: PlaceBidArgs,
     oldOffer: OffersEntity,
@@ -129,13 +115,6 @@ export class BidPlacingService {
     }
   }
 
-  /**
-   * @async
-   * @param placeBidArgs
-   * @param oldOffer
-   * @param userBid
-   * @private
-   */
   private async handleBidTxFail(placeBidArgs: PlaceBidArgs, oldOffer: OffersEntity, userBid: AuctionBidEntity): Promise<void> {
     const auctionId = oldOffer.id;
     try {
@@ -160,11 +139,6 @@ export class BidPlacingService {
     }
   }
 
-  /**
-   * @async
-   * @param calculateArgs
-   * @param entityManager
-   */
   getCalculationInfo(calculateArgs: CalculateArgs, entityManager?: EntityManager): Promise<[CalculationInfo, OffersEntity]> {
     const { collectionId, tokenId, bidderAddress } = calculateArgs;
 
@@ -206,11 +180,6 @@ export class BidPlacingService {
     return entityManager ? calculate(entityManager) : this.connection.transaction('REPEATABLE READ', calculate);
   }
 
-  /**
-   * @async
-   * @param placeBidArgs
-   * @private
-   */
   private async tryPlacePendingBid(placeBidArgs: PlaceBidArgs): Promise<[OffersEntity, AuctionBidEntity]> {
     const { bidderAddress } = placeBidArgs;
 
@@ -263,13 +232,6 @@ export class BidPlacingService {
     return this.connection.transaction<[OffersEntity, AuctionBidEntity]>('REPEATABLE READ', placeWithTransaction);
   }
 
-  /**
-   * @async
-   * @param collectionId
-   * @param tokenId
-   * @param bidderAddress
-   * @private
-   */
   private async getBidsBalance(collectionId: number, tokenId: number, bidderAddress: string) {
     const bids = await this.bidRepository
       .createQueryBuilder('bids')

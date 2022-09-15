@@ -1,14 +1,11 @@
 import { BadRequestException, HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, In, Repository } from 'typeorm';
-import { Collection, OffersEntity } from '../../entity';
+import { Collection, OffersEntity, Tokens } from '../../entity';
 import { CollectionsService } from './collections.service';
 import { ResponseTokenDto } from '../dto';
 import { BnList } from '@polkadot/util/types';
 import { Keyring } from '@polkadot/api';
 import { InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
-import { CollectionService as CollectionDB } from '@app/database/collection.service';
-import { TokenService as TokenDB } from '@app/database/token.service';
-import { SdkProvider } from '@app/uniquesdk';
 
 export class TokensList {
   allowedList: number[];
@@ -18,27 +15,16 @@ export class TokensList {
 }
 export type TokensCollectionList = number[];
 
-export type AddTokenType = {
-  collectionId: number;
-  tokenId: number;
-  owner: string;
-  data: string;
-};
-
 @Injectable()
 export class TokenService {
+  private readonly tokensRepository: Repository<Tokens>;
   private readonly logger: Logger;
   private readonly MAX_TOKEN_NUMBER = 2147483647;
   private readonly offersRepository: Repository<OffersEntity>;
   private readonly keyring = new Keyring({ type: 'sr25519' });
 
-  constructor(
-    private connection: DataSource,
-    private collectionsService: CollectionsService,
-    private collectionDB: CollectionDB,
-    private tokenDB: TokenDB,
-    @InjectUniqueSDK() private uniqueProvider: SdkProvider,
-  ) {
+  constructor(private connection: DataSource, private collectionsService: CollectionsService, @InjectUniqueSDK() private sdk) {
+    this.tokensRepository = connection.getRepository(Tokens);
     this.logger = new Logger(TokenService.name);
     this.offersRepository = connection.getRepository(OffersEntity);
   }
@@ -56,7 +42,7 @@ export class TokenService {
     }
     await this.checkoutTokens(data.tokens, reg);
     // Checkout collection
-    const collectionId = await this.collectionDB.byId(+collection);
+    const collectionId = await this.collectionsService.findById(+collection);
     if (collectionId === undefined) throw new NotFoundException('Collection not found');
     await this.collectionsService.updateAllowedTokens(+collection, data.tokens);
     await this.removeTokens(collectionId);
@@ -91,7 +77,12 @@ export class TokenService {
   }
 
   async removeTokenCollection(collection: string) {
-    await this.tokenDB.deleteByCollectionId(collection);
+    await this.tokensRepository
+      .createQueryBuilder()
+      .delete()
+      .from(Tokens)
+      .where('collection_id = :collection_id', { collection_id: collection })
+      .execute();
   }
 
   /**
@@ -174,21 +165,21 @@ export class TokenService {
   }
 
   /**
-   * Getting an object with data about tokens
+   * Получаем объект с данными о токенах
    * @param {string} collection - collection id
    * @param {string} owner - Substrate address owner tokens
    * @return {Promise<TokensList>}
    */
   async getArrayAllowedTokens(collectionId: number, owner = ''): Promise<TokensList> {
-    const collection = await this.collectionDB.byId(collectionId);
+    const collection = await this.collectionsService.findById(collectionId);
     if (!collection) throw new BadRequestException(`Collection #${collection.id} not found`);
-    const tokensCollection = await this.uniqueProvider.sdk.collections.tokens({ collectionId: +collection.id });
-    const tokenCollectionList = tokensCollection.ids.map((t) => Number(t)).sort((a, b) => a - b);
+    const tokensCollection: BnList = await this.sdk.api.rpc.unique.collectionTokens(collection.id);
+    const tokenCollectionList = tokensCollection.map((t) => t.toNumber()).sort((a, b) => a - b);
     const arrayAllowedTokensTemp = await this.parseStringAllowedTokens(collection);
     const arrayAllowedTokens = arrayAllowedTokensTemp.length ? arrayAllowedTokensTemp : tokenCollectionList;
 
     if (owner !== '') {
-      const accountTokens: BnList = await this.uniqueProvider.api.rpc.unique.accountTokens(collection.id, {
+      const accountTokens: BnList = await this.sdk.api.rpc.unique.accountTokens(collection.id, {
         Substrate: owner,
       });
       const tokenOwnerList = accountTokens.map((t) => t.toNumber()).sort((a, b) => a - b);

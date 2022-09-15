@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { MassCancelingService } from '../admin/services/mass-canceling.service';
-import { MarketConfig } from '@app/config';
-import { bgRed, black, red } from 'cli-color';
+import { MarketConfig, MarketType } from '../config/market-config';
+import { seedToAddress } from '../utils/blockchain/util';
+import { bgRed, black, red, yellow } from 'cli-color';
 import { SettingsService } from './settings.service';
-import { HelperService } from '@app/helpers/helper.service';
 
 @Injectable()
 export class MarketService implements OnModuleInit {
@@ -13,7 +13,6 @@ export class MarketService implements OnModuleInit {
     @Inject('CONFIG') private readonly config: MarketConfig,
     private readonly massCancelingService: MassCancelingService,
     private readonly settingService: SettingsService,
-    private helper: HelperService,
   ) {
     this.logger = new Logger(MarketService.name, { timestamp: true });
   }
@@ -52,14 +51,14 @@ export class MarketService implements OnModuleInit {
       this.logger.error(errorStopMessage + red('Escrow seed is not defined'));
     } else {
       try {
-        await this.helper.seedToAddress(this.config.blockchain.escrowSeed);
+        await seedToAddress(this.config.blockchain.escrowSeed);
       } catch (e) {
         this.logger.warn(errorStopMessage + red('Escrow seed is invalid'));
       }
     }
     if (!this.config.auction.seed) {
       try {
-        await this.helper.seedToAddress(this.config.auction.seed);
+        await seedToAddress(this.config.auction.seed);
       } catch (e) {
         this.logger.error(errorStopMessage + red('Main sale seed is invalid'));
       }
@@ -69,7 +68,7 @@ export class MarketService implements OnModuleInit {
 
     if (this.config.mainSaleSeed) {
       try {
-        await this.helper.seedToAddress(this.config.mainSaleSeed);
+        await seedToAddress(this.config.mainSaleSeed);
       } catch (e) {
         this.logger.error(errorStopMessage + red('Main sale seed is invalid'));
       }

@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import { Bid, BidStatus, TypeAttributToken } from '../types';
 
 import { OfferAttributes, OfferAttributesDto, OfferEntityDto, OffersFilter, OfferTraits, TraitDto } from './dto';
-import { AuctionBidEntity, Collection, OffersEntity, SearchIndex } from '../entity';
+import { AuctionBidEntity, OffersEntity, SearchIndex } from '../entity';
 
 import { PaginationRequest } from '../utils/pagination/pagination-request';
 import { PaginationResultDto } from '../utils/pagination/pagination-result';
@@ -12,7 +12,6 @@ import { OfferSortingRequest } from '../utils/sorting/sorting-request';
 import { InjectSentry, SentryService } from '../utils/sentry';
 import { OffersFilterService } from './offers-filter.service';
 import { OffersFilterType, OffersItemType } from './types';
-import { CollectionService } from '@app/database/collection.service';
 
 @Injectable()
 export class OffersService {
@@ -22,7 +21,6 @@ export class OffersService {
     private connection: DataSource,
     @InjectSentry() private readonly sentryService: SentryService,
     private readonly offersFilterService: OffersFilterService,
-    private readonly collectionService: CollectionService,
   ) {
     this.logger = new Logger(OffersService.name);
   }
@@ -43,16 +41,13 @@ export class OffersService {
     let auctionIds: Array<number> = [];
     let bids = [];
     let searchIndex = [];
-    let collections = [];
 
     try {
       offers = await this.offersFilterService.filter(offersFilter, pagination, sort);
       auctionIds = this.auctionIds(offers.items);
       bids = await this.bids(auctionIds);
       searchIndex = await this.searchIndex(this.parserCollectionIdTokenId(offers.items));
-      collections = await this.collectionService.collections(this.getCollectionIds(offers.items));
-
-      items = this.parseItems(offers.items, bids, searchIndex, collections) as any as Array<OffersEntity>;
+      items = this.parseItems(offers.items, bids, searchIndex) as any as Array<OffersEntity>;
     } catch (e) {
       this.logger.error(e.message);
       this.sentryService.instance().captureException(new BadRequestException(e), {
@@ -117,17 +112,15 @@ export class OffersService {
     return null;
   }
 
-  private getCollectionIds(items: Array<any>): Array<number> {
-    return [...new Set(items.map((item) => +item.collection_id))].filter((id) => id !== null && id !== 0);
-  }
-
   private async searchIndex(sqlValues: string): Promise<Array<Partial<SearchIndex>>> {
     if (sqlValues) {
       const result = await this.connection.manager.query(
         `select
             si.collection_id,
             si.token_id,
-            si.attributes
+            items,
+            type,
+            key
         from search_index si  inner join (${sqlValues}) t on
         t.collection_id = si.collection_id and
         t.token_id = si.token_id;`,
@@ -137,16 +130,65 @@ export class OffersService {
     return [];
   }
 
-  private parseItems(
-    items: Array<OffersFilterType>,
-    bids: Partial<Bid>[],
-    searchIndex: Partial<SearchIndex>[],
-    collections: Array<Collection>,
-  ): Array<OffersItemType> {
+  private parseSearchIndex(): (
+    previousValue: { attributes: any[] },
+    currentValue: Partial<SearchIndex>,
+    currentIndex: number,
+    array: Partial<SearchIndex>[],
+  ) => { attributes: any[] } {
+    const types = [TypeAttributToken.String, TypeAttributToken.Enum];
+
+    return (acc, item) => {
+      if (item.type === TypeAttributToken.Prefix) {
+        acc['prefix'] = item.items.pop();
+      }
+
+      if (item.key === 'collectionName') {
+        acc['collectionName'] = item.items.pop();
+      }
+
+      if (item.key === 'description') {
+        acc['description'] = item.items.pop();
+      }
+
+      if (item.type === TypeAttributToken.ImageURL) {
+        const image = String(item.items.pop());
+        if (image.search('ipfs.uniquenetwork.dev') !== -1) {
+          acc[`${item.key}`] = image;
+        } else {
+          if (image.search('https://') !== -1 && image.search('http://') !== 0) {
+            acc[`${item.key}`] = image;
+          } else {
+            if (image) {
+              acc[`${item.key}`] = `https://ipfs.uniquenetwork.dev/ipfs/${image}`;
+            } else {
+              acc[`${item.key}`] = null;
+            }
+          }
+        }
+      }
+
+      if (item.type === TypeAttributToken.VideoURL) {
+        const video = String(item.items.pop());
+        acc[`${item.key}`] = video;
+      }
+
+      if (types.includes(item.type) && !['collectionName', 'description'].includes(item.key)) {
+        acc.attributes.push({
+          key: item.key,
+          value: item.items.length === 1 ? item.items.pop() : item.items,
+          type: item.type,
+        });
+      }
+      return acc;
+    };
+  }
+
+  private parseItems(items: Array<OffersFilterType>, bids: Partial<Bid>[], searchIndex: Partial<SearchIndex>[]): Array<OffersItemType> {
+    const parseSearchIndex = this.parseSearchIndex;
+
     function convertorFlatToObject(): (previousValue: any, currentValue: any, currentIndex: number, array: any[]) => any {
       return (acc, item) => {
-        const token = searchIndex.find((index) => index.collection_id === item.collection_id && index.token_id === item.token_id);
-        const collection = collections.find((collection) => collection.id === item.collection_id);
         const obj = {
           collection_id: +item.collection_id,
           token_id: +item.token_id,
@@ -157,23 +199,11 @@ export class OffersService {
           address_from: item.offer_address_from,
           created_at: new Date(item.offer_created_at_ask),
           auction: null,
-          tokenDescription: token ? token?.attributes : null,
-          collectionDescription: {
-            mode: collection?.mode,
-            name: collection?.name,
-            description: collection?.description,
-            tokenPrefix: collection?.tokenPrefix,
-            id: collection?.id,
-            owner: collection?.owner,
-            schema: {
-              attributesSchemaVersion: collection?.data['schema'].attributesSchemaVersion,
-              coverPicture: collection?.data['schema'].coverPicture,
-              image: collection?.data['schema'].image,
-              schemaName: collection?.data['schema'].schemaName,
-              schemaVersion: collection?.data['schema'].schemaVersion,
-              collectionId: collection?.data['schema'].collectionId,
-            },
-          },
+          tokenDescription: searchIndex
+            .filter((index) => index.collection_id === item.collection_id && index.token_id === item.token_id)
+            .reduce(parseSearchIndex(), {
+              attributes: [],
+            }),
         };
 
         if (item.offer_type === 'Auction') {
@@ -207,9 +237,8 @@ export class OffersService {
     const bids = await this.bids(this.auctionIds(source));
 
     const searchIndex = await this.searchIndex(this.parserCollectionIdTokenId(source));
-    const collections = await this.collectionService.collections(this.getCollectionIds(source));
 
-    const offers = this.parseItems(source, bids, searchIndex, collections).pop() as any as OffersEntity;
+    const offers = this.parseItems(source, bids, searchIndex).pop() as any as OffersEntity;
 
     return offers && OfferEntityDto.fromOffersEntity(offers);
   }
