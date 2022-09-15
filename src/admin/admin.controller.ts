@@ -186,7 +186,7 @@ export class AdminController {
     return await this.fiatSaleService.massFiatSale(data);
   }
 
-  @Delete('//collections/mass-cancel-fiat')
+  @Delete('/collections/mass-cancel-fiat')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Mass cancel fiat',
