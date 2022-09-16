@@ -13,7 +13,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Login to GitHub Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build
-        working-directory: .
-        run: docker build -t checkout-market .docker
-
+        run: docker build -t ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev . -f .docker/Dockerfile
+      - name: Push to GitHub Registry
+        run: docker push ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev
