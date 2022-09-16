@@ -11,5 +11,9 @@ jobs:
     name: Build dockers
     runs-on: self-hosted
     steps:
-      - run: docker ps
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build
+        working-directory: .
+        run: docker build -t checkout-market .docker
 
