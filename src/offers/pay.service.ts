@@ -207,8 +207,8 @@ export class PayOffersService {
   async cancelFiat(cancelFiatInput: CancelFiatInput): Promise<OfferFiatDto> {
     const offer = await this.offersRepository.findOne({
       where: {
-        collection_id: cancelFiatInput.collectionId.toString(),
-        token_id: cancelFiatInput.tokenId.toString(),
+        collection_id: cancelFiatInput.collectionId,
+        token_id: cancelFiatInput.tokenId,
         address_from: this.mainAccount.instance.address,
         status: ASK_STATUS.ACTIVE,
       },

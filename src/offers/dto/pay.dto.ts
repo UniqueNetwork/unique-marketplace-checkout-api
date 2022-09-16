@@ -93,12 +93,9 @@ export class OfferFiatDto {
 }
 
 export class CancelFiatInput {
-  @ApiProperty({ example: 1 })
-  @Max(U32_MAX_VALUE)
-  @IsPositive()
-  @IsInt()
-  collectionId: number;
+  @ApiProperty({ description: 'Collection ID', example: 1 })
+  collectionId: string;
 
   @ApiProperty({ description: 'Token ID', example: 4 })
-  tokenId: number;
+  tokenId: string;
 }

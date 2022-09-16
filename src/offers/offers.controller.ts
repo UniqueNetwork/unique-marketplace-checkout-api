@@ -162,7 +162,7 @@ export class OffersController {
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @ApiConflictResponse({ type: ConflictResponse })
   @UseGuards(AuthGuard, MainSaleSeedGuard)
-  async cancelFiat(@Body(new ValidationPipe({ transform: true })) cancelFiatInput: CancelFiatInput): Promise<OfferFiatDto> {
+  async cancelFiat(@Query() cancelFiatInput: CancelFiatInput): Promise<OfferFiatDto> {
     return this.payOffersService.cancelFiat(cancelFiatInput);
   }
 }
