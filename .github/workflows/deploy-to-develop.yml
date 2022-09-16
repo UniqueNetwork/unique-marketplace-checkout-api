@@ -1,4 +1,4 @@
-name: Deploy to Develop cluster
+name: Deploy to Develop
 
 on:
   push:
@@ -7,11 +7,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-gitlab-pipeline:
-    name: Run gitlab pipeline
-    runs-on: ubuntu-latest
+  build:
+    name: Build dockers
+    runs-on: self-hosted
     steps:
-      - name: Trigger gitlab
-        uses: wei/curl@v1
-        with:
-          args: -X POST -F token=${{ secrets.UNIQUE_GITLAB_TOKEN }} -F ref=master -F variables[REMOTE_COMMIT]=${GITHUB_SHA} -F variables[DEPLOY_TO]=dev https://gitlab.uniquenetwork.dev/api/v4/projects/27/trigger/pipeline
+      - run: docker ps
+
