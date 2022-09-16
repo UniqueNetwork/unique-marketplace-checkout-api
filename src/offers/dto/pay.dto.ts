@@ -1,7 +1,6 @@
 import { IsNotEmpty, IsString, IsBoolean, IsNumber, Min, IsEnum, Max, IsPositive, IsInt } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { HttpStatus } from '@nestjs/common';
-import { HexString } from '@unique-nft/substrate-client/types';
 
 import { CurrencyNames } from '@app/types';
 import { enumToArray } from '@app/utils';
