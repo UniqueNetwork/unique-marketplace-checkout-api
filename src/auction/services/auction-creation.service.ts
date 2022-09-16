@@ -110,7 +110,7 @@ export class AuctionCreationService {
 
     await this.connection.createQueryBuilder().insert().into(BlockchainBlock).values(block).orIgnore().execute();
 
-    this.logger.debug(`Token transfer block number: ${block.block_number}`);
+    this.logger.debug(`Token transfer block number: ${blockNumber}`);
 
     const checkOwner = await this.checkOwner(+collectionId, +tokenId);
     if (!checkOwner) {

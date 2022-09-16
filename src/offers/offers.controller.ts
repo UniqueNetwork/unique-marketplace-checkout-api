@@ -49,7 +49,7 @@ import { OfferSortingRequest } from '../utils/sorting/sorting-request';
 import { TraceInterceptor } from '../utils/sentry';
 import { PayOffersService } from './pay.service';
 
-import { AuthGuard, MainSaleSeedGuard } from '@app/admin/guards';
+import { CancelFiatGuard } from './guards/signature.guard';
 
 import { ResponseAdminUnauthorizedDto, ResponseAdminForbiddenDto } from '@app/admin/dto';
 
@@ -120,15 +120,6 @@ export class OffersController {
     return this.payOffersService.payOffer(input);
   }
 
-  @ApiBearerAuth()
-  @ApiUnauthorizedResponse({
-    description: 'Unauthorized address or bad signature',
-    type: ResponseAdminUnauthorizedDto,
-  })
-  @ApiForbiddenResponse({
-    description: 'Forbidden. Marketplace disabled management for administrators.',
-    type: ResponseAdminForbiddenDto,
-  })
   @Post('create_fiat_offer')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -138,7 +129,6 @@ export class OffersController {
   @ApiResponse({ status: HttpStatus.CREATED, type: OfferFiatDto })
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @ApiConflictResponse({ type: ConflictResponse })
-  @UseGuards(AuthGuard, MainSaleSeedGuard)
   async createFiat(@Body(new ValidationPipe({ transform: true })) createFiatInput: CreateFiatInput): Promise<OfferFiatDto> {
     return this.payOffersService.createFiat(createFiatInput);
   }
@@ -161,7 +151,8 @@ export class OffersController {
   @ApiResponse({ status: HttpStatus.CREATED, type: OfferFiatDto })
   @ApiBadRequestResponse({ type: BadRequestResponse })
   @ApiConflictResponse({ type: ConflictResponse })
-  @UseGuards(AuthGuard, MainSaleSeedGuard)
+  @ApiBearerAuth()
+  @UseGuards(CancelFiatGuard)
   async cancelFiat(@Query() cancelFiatInput: CancelFiatInput): Promise<OfferFiatDto> {
     return this.payOffersService.cancelFiat(cancelFiatInput);
   }
