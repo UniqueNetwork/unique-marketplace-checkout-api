@@ -7,8 +7,17 @@ on:
   workflow_dispatch:
 
 jobs:
+  before:
+    name: Before
+    runs-on: self-hosted
+    environment: dev
+    steps:
+      - name: Docker network
+        run: if [ ! "$(docker network ls -f name=${{ secrets.DOCKER_NETWORK }} | grep ${{ secrets.DOCKER_NETWORK }})" ]; then docker network create --driver=overlay --attachable ${{ secrets.DOCKER_NETWORK }};fi
+
   build:
-    name: Build dockers
+    name: Build docker image
+    needs: before
     runs-on: self-hosted
     steps:
       - name: Checkout
