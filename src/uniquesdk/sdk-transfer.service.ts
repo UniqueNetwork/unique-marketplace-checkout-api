@@ -123,7 +123,6 @@ export class SdkTransferService {
     collectionId: number,
     tokenId: number,
   ): Promise<TransferTokenResult> {
-    console.log(fromAccount.instance.address, toAddress, collectionId, tokenId);
     const { parsed, submittableResult, isCompleted } = await this.unique.tokens.transfer.submitWaitResult(
       {
         address: fromAccount.instance.address,

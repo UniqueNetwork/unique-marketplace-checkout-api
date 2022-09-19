@@ -173,7 +173,7 @@ export class AdminController {
     return await this.massCancelingService.massCancel();
   }
 
-  @Post('/collections/fiat')
+  @Post('/mass-sale-fiat')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Fiat mass price sale',
@@ -186,7 +186,7 @@ export class AdminController {
     return await this.fiatSaleService.massFiatSale(data);
   }
 
-  @Delete('/collections/mass-cancel-fiat')
+  @Delete('/mass-cancel-fiat')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Mass cancel fiat',
