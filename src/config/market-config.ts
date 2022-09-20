@@ -39,7 +39,7 @@ export interface MarketConfig {
   autoDBMigrations: boolean;
   auction: AuctionConfig;
   marketType: MarketType;
-  mainSaleSeed: string;
+  bulkSaleSeed: string;
   adminList: string;
   base: DatabaseOrm;
   jwt: {

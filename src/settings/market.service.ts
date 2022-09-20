@@ -66,9 +66,9 @@ export class MarketService implements OnModuleInit {
       this.logger.error('Auction seed is not defined');
     }
 
-    if (this.config.mainSaleSeed) {
+    if (this.config.bulkSaleSeed) {
       try {
-        await seedToAddress(this.config.mainSaleSeed);
+        await seedToAddress(this.config.bulkSaleSeed);
       } catch (e) {
         this.logger.error(errorStopMessage + red('Main sale seed is invalid'));
       }

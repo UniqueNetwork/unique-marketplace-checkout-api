@@ -11,7 +11,7 @@ export default {
   disableSecurity: process.env.DISABLE_SECURITY === 'true',
   rootDir: path.normalize(path.join(__dirname, '..')),
   autoDBMigrations: process.env.AUTO_DB_MIGRATIONS === 'true',
-  mainSaleSeed: process.env.MAINSALE_SEED || null,
+  bulkSaleSeed: process.env.BULK_SALE_SEED || null,
   adminList: process.env.ADMIN_LIST || '',
   base: {
     host: process.env.POSTGRES_HOST || 'marketplace-postgres',

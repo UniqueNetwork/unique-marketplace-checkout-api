@@ -34,6 +34,7 @@ type PaymentsResult = {
 @Injectable()
 export class PayOffersService {
   private auctionAccount: Account<KeyringPair>;
+  private bulkSaleAccount: Account<KeyringPair>;
 
   private logger: Logger;
   private readonly offersRepository: Repository<OffersEntity>;
@@ -54,6 +55,7 @@ export class PayOffersService {
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
     this.nftTransferRepository = connection.getRepository(NFTTransfer);
     this.auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
+    this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.bulkSaleSeed);
   }
 
   async payOffer(input: PayOfferDto): Promise<PayOfferResponseDto> {
@@ -181,6 +183,14 @@ export class PayOffersService {
   }
 
   async createFiat(createFiatInput: CreateFiatInput): Promise<OfferFiatDto> {
+    const allowedAccounts = [...this.config.adminList.split(',').map((item) => item.trim()), this.bulkSaleAccount.instance.address];
+    if (!allowedAccounts.includes(createFiatInput.signerPayloadJSON.address)) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Wrong signer address',
+        error: 'Wrong signer address',
+      });
+    }
     try {
       const { blockNumber, collectionId, tokenId, addressFrom, addressTo, isCompleted, internalError, blockHash } =
         await this.sdkExtrinsicService.submitTransferToken(
