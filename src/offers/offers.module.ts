@@ -14,6 +14,6 @@ import { AdminModule } from '@app/admin/admin.module';
   imports: [ConfigServiceModule, AuctionModule, AdminModule],
   controllers: [OffersController],
   providers: [OffersService, OffersFilterService, PayOffersService],
-  exports: [OffersService],
+  exports: [OffersService, PayOffersService],
 })
 export class OffersModule {}

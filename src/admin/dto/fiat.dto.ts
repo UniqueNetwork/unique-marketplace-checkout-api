@@ -38,7 +38,7 @@ export class MassFiatSaleResultDto {
   @ApiProperty()
   message: string;
   @ApiProperty()
-  data: number[];
+  tokenIds: number[];
 }
 
 export class MassCancelFiatResult {

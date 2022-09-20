@@ -5,6 +5,7 @@ import { SignatureType, Account } from '@unique-nft/accounts';
 import { KeyringProvider } from '@unique-nft/accounts/keyring';
 import { KeyringPair } from '@polkadot/keyring/types';
 import { v4 as uuid } from 'uuid';
+import { Sdk } from '@unique-nft/substrate-client';
 
 import { SdkTransferService } from '@app/uniquesdk';
 import { MarketConfig } from '@app/config/market-config';
@@ -14,6 +15,7 @@ import { SellingMethod } from '@app/types';
 import { SearchIndexService } from '@app/auction/services/search-index.service';
 import { SdkExtrinsicService, NetworkName } from '@app/uniquesdk';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
+import { InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 
 import { PayOfferDto, PayOfferResponseDto, CreateFiatInput, OfferFiatDto, CancelFiatInput } from './dto';
 
@@ -45,6 +47,7 @@ export class PayOffersService {
     private searchIndexService: SearchIndexService,
     private readonly sdkExtrinsicService: SdkExtrinsicService,
     @InjectSentry() private readonly sentryService: SentryService,
+    @InjectUniqueSDK() private sdk: Sdk,
   ) {
     this.logger = new Logger(PayOffersService.name);
     this.offersRepository = this.connection.getRepository(OffersEntity);
@@ -265,6 +268,7 @@ export class PayOffersService {
       where: {
         collection_id: cancelFiatInput.collectionId,
         token_id: cancelFiatInput.tokenId,
+        address_from: cancelFiatInput.sellerAddress,
         address_to: this.auctionAccount.instance.address,
         status: ASK_STATUS.ACTIVE,
         type: SellingMethod.Fiat,

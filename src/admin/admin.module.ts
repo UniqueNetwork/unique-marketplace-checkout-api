@@ -6,6 +6,7 @@ import { ConfigServiceModule } from '@app/config/module';
 import { MarketConfig } from '@app/config/market-config';
 import { AuctionModule } from '@app/auction/auction.module';
 import { DatabaseORMModule } from '@app/database/database.module';
+import { PayOffersService } from '@app/offers/pay.service';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { DatabaseORMModule } from '@app/database/database.module';
     DatabaseORMModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService, CollectionsService, MassSaleService, TokenService, MassCancelingService, FiatSaleService],
+  providers: [AdminService, CollectionsService, MassSaleService, TokenService, MassCancelingService, PayOffersService, FiatSaleService],
   exports: [AdminService, MassSaleService, MassCancelingService, TokenService, JwtModule],
 })
 export class AdminModule {}

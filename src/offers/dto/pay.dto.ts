@@ -99,4 +99,10 @@ export class CancelFiatInput {
 
   @ApiProperty({ description: 'Seller storage address', example: '5CfC8HRcV5Rc4jHFHmZsSjADCMYc7zoWbvxdoNG9qwEP7aUB' })
   sellerAddress: string;
+
+  @ApiProperty({
+    description: 'Authorization is performed using a signature in the blockchain. To form a signature, use the phrase: cancel_fiat_offer',
+    example: '0x0000000000000000000000000000000000000000',
+  })
+  signature?: HexString;
 }
