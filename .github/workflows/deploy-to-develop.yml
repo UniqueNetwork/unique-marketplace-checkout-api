@@ -13,6 +13,9 @@ jobs:
     environment: dev
     env:
       DOCKER_NETWORK: ${{ secrets.DOCKER_NETWORK }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -20,6 +23,8 @@ jobs:
         run: if [ ! "$(docker network ls -f name=${{ secrets.DOCKER_NETWORK }} | grep ${{ secrets.DOCKER_NETWORK }})" ]; then docker network create --driver=overlay --attachable ${{ secrets.DOCKER_NETWORK }};fi
       - name: Docker stack
         run: docker stack deploy -c .github/services/devops.yml ${{ secrets.DOCKER_NETWORK }}
+      - name: Db stack
+        run: docker stack deploy -c .github/services/db.yml ${{ secrets.DOCKER_NETWORK }}
 
   build:
     name: Build docker image
