@@ -1,7 +1,7 @@
 import { Injectable, Inject, HttpStatus, BadRequestException } from '@nestjs/common';
 import { SignatureType, Account } from '@unique-nft/accounts';
 import { KeyringProvider } from '@unique-nft/accounts/keyring';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Sdk } from '@unique-nft/substrate-client';
 import { KeyringPair } from '@polkadot/keyring/types';
 
@@ -23,10 +23,12 @@ export class FiatSaleService {
   constructor(
     @Inject('CONFIG') private config: MarketConfig,
     @InjectUniqueSDK() private readonly unique: Sdk,
+    private connection: DataSource,
     private readonly payOffersService: PayOffersService,
   ) {
     this.auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
     this.mainAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
+    this.offersRepository = this.connection.getRepository(OffersEntity);
   }
 
   async massFiatSale(data: MassFiatSaleDTO): Promise<MassFiatSaleResultDto> {
