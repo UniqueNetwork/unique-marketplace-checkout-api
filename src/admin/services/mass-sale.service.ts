@@ -251,11 +251,11 @@ export class MassSaleService {
 
     const keyring = new Keyring({ type: 'sr25519' });
 
-    const { mainSaleSeed } = this.config;
+    const { bulkSaleSeed } = this.config;
 
-    if (!mainSaleSeed) throw new BadRequestException('Main sale seed not set');
+    if (!bulkSaleSeed) throw new BadRequestException('Main sale seed not set');
 
-    const signer = keyring.addFromUri(mainSaleSeed);
+    const signer = keyring.addFromUri(bulkSaleSeed);
 
     const allowedTokens = await this.tokenService.getArrayAllowedTokens(+collectionById.collectionId, signer.address);
 
@@ -282,7 +282,7 @@ export class MassSaleService {
    * @private
    */
   private checkoutMarketPlace() {
-    if (!this.config.mainSaleSeed) throw new BadRequestException('Main sale seed not set');
+    if (!this.config.bulkSaleSeed) throw new BadRequestException('Main sale seed not set');
     if (!this.config.marketType) throw new BadRequestException('Market place not set');
   }
 }

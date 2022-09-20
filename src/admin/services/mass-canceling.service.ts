@@ -163,11 +163,11 @@ export class MassCancelingService {
   private getSigner(): KeyringPair {
     const keyring = new Keyring({ type: 'sr25519' });
 
-    const { mainSaleSeed } = this.config;
+    const { bulkSaleSeed } = this.config;
 
-    if (!mainSaleSeed) throw new BadRequestException('Main sale seed not set');
+    if (!bulkSaleSeed) throw new BadRequestException('Main sale seed not set');
 
-    const signer = keyring.addFromUri(mainSaleSeed);
+    const signer = keyring.addFromUri(bulkSaleSeed);
 
     return signer;
   }

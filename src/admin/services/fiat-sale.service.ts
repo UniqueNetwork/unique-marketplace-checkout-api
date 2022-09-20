@@ -27,7 +27,7 @@ export class FiatSaleService {
     private readonly payOffersService: PayOffersService,
   ) {
     this.auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
-    this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
+    this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.bulkSaleSeed);
     this.offersRepository = this.connection.getRepository(OffersEntity);
   }
 

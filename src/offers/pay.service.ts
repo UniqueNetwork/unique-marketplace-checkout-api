@@ -55,7 +55,7 @@ export class PayOffersService {
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
     this.nftTransferRepository = connection.getRepository(NFTTransfer);
     this.auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
-    this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
+    this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.bulkSaleSeed);
   }
 
   async payOffer(input: PayOfferDto): Promise<PayOfferResponseDto> {

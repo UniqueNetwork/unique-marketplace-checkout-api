@@ -13,13 +13,13 @@ export class MainSaleSeedGuard implements CanActivate {
 
     const { adminAddress } = req;
 
-    const { mainSaleSeed } = this.config;
+    const { bulkSaleSeed } = this.config;
 
-    if (!mainSaleSeed) throw new UnauthorizedException(UNAUTHORIZED_ADMIN_ERROR_MESSAGE);
+    if (!bulkSaleSeed) throw new UnauthorizedException(UNAUTHORIZED_ADMIN_ERROR_MESSAGE);
 
     const keyring = new Keyring({ type: 'sr25519' });
 
-    const signer = keyring.addFromUri(mainSaleSeed);
+    const signer = keyring.addFromUri(bulkSaleSeed);
 
     const mainSaleSeedAddress = signer.address;
 
