@@ -18,7 +18,7 @@ import { MassFiatSaleDTO, MassFiatSaleResultDto, MassCancelFiatResult } from '..
 @Injectable()
 export class FiatSaleService {
   private auctionAccount: Account<KeyringPair>;
-  private mainAccount: Account<KeyringPair>;
+  private bulkSaleAccount: Account<KeyringPair>;
   private readonly offersRepository: Repository<OffersEntity>;
   constructor(
     @Inject('CONFIG') private config: MarketConfig,
@@ -27,14 +27,14 @@ export class FiatSaleService {
     private readonly payOffersService: PayOffersService,
   ) {
     this.auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
-    this.mainAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
+    this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
     this.offersRepository = this.connection.getRepository(OffersEntity);
   }
 
   async massFiatSale(data: MassFiatSaleDTO): Promise<MassFiatSaleResultDto> {
     const { tokens: accountTokens } = await this.unique.tokens.getAccountTokens({
       collectionId: data.collectionId,
-      address: this.mainAccount.instance.address,
+      address: this.bulkSaleAccount.instance.address,
     });
     if (accountTokens.length === 0) {
       throw new BadRequestException({
@@ -60,15 +60,15 @@ export class FiatSaleService {
     for (const tokenId of tokenIdsAcount) {
       const unsignedTxPayload = await this.unique.tokens.transfer.build(
         {
-          address: this.mainAccount.instance.address,
+          address: this.bulkSaleAccount.instance.address,
           to: this.auctionAccount.instance.address,
           collectionId: data.collectionId,
           tokenId: parseInt(tokenId),
         },
-        { signer: this.mainAccount },
+        { signer: this.bulkSaleAccount },
       );
 
-      const { signature } = await this.mainAccount.sign(unsignedTxPayload);
+      const { signature } = await this.bulkSaleAccount.sign(unsignedTxPayload);
 
       const offerFiat = await this.payOffersService.createFiat({
         price: data.price,
@@ -87,13 +87,11 @@ export class FiatSaleService {
   }
 
   async massCancelFiat(): Promise<MassCancelFiatResult> {
-    const mainAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.mainSaleSeed);
-
     const currentOffers = await this.offersRepository.find({
       where: {
         status: ASK_STATUS.ACTIVE,
         type: SellingMethod.Fiat,
-        address_from: mainAccount.instance.address,
+        address_from: this.bulkSaleAccount.instance.address,
         address_to: this.auctionAccount.instance.address,
       },
     });
