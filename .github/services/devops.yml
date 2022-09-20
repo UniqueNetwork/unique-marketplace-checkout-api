@@ -1,0 +1,62 @@
+version: "3.7"
+services:
+  traefik:
+    image: traefik:latest
+    ports:
+      - 80:80
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == ip-172-31-27-233
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+    command: >
+      --api.insecure=true
+      --providers.docker
+      --providers.docker.exposedbydefault=false
+      --providers.docker.network="$DOCKER_NETWORK"
+      --entrypoints.web.address=:80
+  agent:
+    image: portainer/agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    networks:
+      - agent_network
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.platform.os == linux]
+  portainer:
+    image: portainer/portainer-ce
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    volumes:
+      - portainer:/data
+    networks:
+      - agent_network
+      - default
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ip-172-31-27-233]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.portainer.rule=Host("23.22.71.155")
+      - traefik.http.routers.portainer.entrypoints=web
+      - traefik.http.services.portainer.loadbalancer.server.port=9000
+
+
+networks:
+  default:
+    external: true
+    name: $DOCKER_NETWORK
+  agent_network:
+    driver: overlay
+    attachable: true
+
+volumes:
+  portainer:

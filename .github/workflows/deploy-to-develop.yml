@@ -11,9 +11,15 @@ jobs:
     name: Before
     runs-on: self-hosted
     environment: dev
+    env:
+      DOCKER_NETWORK: ${{ secrets.DOCKER_NETWORK }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v3
       - name: Docker network
         run: if [ ! "$(docker network ls -f name=${{ secrets.DOCKER_NETWORK }} | grep ${{ secrets.DOCKER_NETWORK }})" ]; then docker network create --driver=overlay --attachable ${{ secrets.DOCKER_NETWORK }};fi
+      - name: Docker stack
+        run: docker stack deploy -c .github/services/devops.yml ${{ secrets.DOCKER_NETWORK }}
 
   build:
     name: Build docker image
