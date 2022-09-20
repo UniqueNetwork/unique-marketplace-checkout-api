@@ -43,3 +43,13 @@ jobs:
         run: docker build -t ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev . -f .docker/Dockerfile
       - name: Push to GitHub Registry
         run: docker push ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev
+
+  migrate:
+    name: Migrate DB
+    needs: build
+    runs-on: self-hosted
+    environment: dev
+    steps:
+      - name: Migrate Postgres
+        run: docker run --rm --network=${{ secrets.DOCKER_NETWORK }} -e POSTGRES_URL="postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}" ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev npm run migration:run
+
