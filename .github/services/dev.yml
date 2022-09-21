@@ -27,6 +27,7 @@ services:
       - DISABLE_SECURITY
       - CONTRACT_ETH_OWNER_SEED
       - CONTRACT_ADDRESS
+      - UNIQUE_COLLECTION_IDS
     labels:
       - traefik.enable=true
       - traefik.http.routers.fiat-back-dev.rule=Host("fiat-back-dev.uniquenetwork.dev")
