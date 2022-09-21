@@ -1,0 +1,40 @@
+version: "3.9"
+services:
+  back:
+    image: ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ip-172-31-27-233]
+    environment:
+      - POSTGRES_URL
+      - NODE_ENV
+      - MARKET_TYPE
+      - API_PORT
+      - AUTO_DB_MIGRATIONS
+      - BULK_SALE_SEED
+      - ADMIN_LIST
+      - SENTRY_ENABLED
+      - ESCROW_SEED
+      - UNIQUE_WS_ENDPOINT
+      - KUSAMA_WS_ENDPOINT
+      - AUCTION_SEED
+      - AUCTION_COMMISSION
+      - IPFS
+      - CHECKOUT_SECRET_KEY
+      - DISABLE_SECURITY
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.fiat-back-dev.rule=Host("fiat-back-dev.uniquenetwork.dev")
+      - traefik.http.routers.fiat-back-dev.entrypoints=web
+      - traefik.http.services.fiat-back-dev.loadbalancer.server.port=${API_PORT}
+
+volumes:
+  db:
+
+networks:
+  default:
+    external: true
+    name: $DOCKER_NETWORK
