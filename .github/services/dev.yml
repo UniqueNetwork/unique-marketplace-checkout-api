@@ -25,6 +25,8 @@ services:
       - IPFS
       - CHECKOUT_SECRET_KEY
       - DISABLE_SECURITY
+      - CONTRACT_ETH_OWNER_SEED
+      - CONTRACT_ADDRESS
     labels:
       - traefik.enable=true
       - traefik.http.routers.fiat-back-dev.rule=Host("fiat-back-dev.uniquenetwork.dev")
