@@ -64,13 +64,6 @@ async function bootstrap() {
   const pkg = JSON.parse(await promises.readFile(join('.', 'package.json'), 'utf8'));
 
   if (config.disableSecurity) {
-    // app.use((req, res, next) => {
-    //   res.header('Access-Control-Allow-Origin', '*');
-    //   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS,HEAD');
-    //   res.header('Access-Control-Allow-Headers', 'Content-Type, Accept, Signature, Authorization');
-    //   next();
-    // });
-
     app.enableCors({
       allowedHeaders: 'X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, Observe, Signature, Authorization',
       origin: true,
