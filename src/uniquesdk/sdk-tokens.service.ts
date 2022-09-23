@@ -30,8 +30,8 @@ export class SdkTokensService {
    * @param token
    * @param collection
    */
-  async tokenData(token: number, collection: number): Promise<any> {
-    return await this.sdk.tokens.get({ collectionId: collection, tokenId: token });
+  async tokenData(token: number, collection: number): Promise<TokenByIdResult> {
+    return this.sdk.tokens.get({ collectionId: collection, tokenId: token });
   }
 
   async tokenWithCollection(

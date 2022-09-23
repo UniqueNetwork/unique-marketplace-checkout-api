@@ -292,48 +292,52 @@ export class PayOffersService {
       });
     }
 
-    const { isError, blockNumber, collectionId, tokenId, addressFrom, addressTo } = await this.sdkTransferService.transferToken(
-      this.auctionAccount,
-      cancelFiatInput.sellerAddress,
-      parseInt(offer.collection_id),
-      parseInt(offer.token_id),
-    );
+    try {
+      const { isError, blockNumber, collectionId, tokenId, addressFrom, addressTo } = await this.sdkTransferService.transferToken(
+        this.auctionAccount,
+        cancelFiatInput.sellerAddress,
+        parseInt(offer.collection_id),
+        parseInt(offer.token_id),
+      );
 
-    if (isError) {
-      throw new BadRequestException({
-        statusCode: HttpStatus.CONFLICT,
-        message: 'Offer transfer error',
-        error: 'Offer transfer error',
+      if (isError) {
+        throw new BadRequestException({
+          statusCode: HttpStatus.CONFLICT,
+          message: 'Offer transfer error',
+          error: 'Offer transfer error',
+        });
+      }
+
+      this.logger.debug(`Token transfer block number: ${blockNumber}`);
+
+      const updatedOffer = await this.offersRepository.save({
+        ...offer,
+        status: ASK_STATUS.CANCELLED,
+        block_number_cancel: blockNumber.toString(),
       });
+
+      const newTransfer = this.nftTransferRepository.create({
+        id: uuid(),
+        network: this.config.blockchain.unique.network,
+        collection_id: collectionId.toString(),
+        token_id: tokenId.toString(),
+        address_from: addressFrom,
+        address_to: addressTo,
+        block_number: blockNumber.toString(),
+        created_at: new Date(),
+      });
+
+      await this.nftTransferRepository.save(newTransfer);
+
+      return {
+        id: updatedOffer.id,
+        collectionId: parseInt(updatedOffer.collection_id),
+        tokenId: parseInt(updatedOffer.token_id),
+        price: updatedOffer.price,
+        seller: updatedOffer.address_from,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
     }
-
-    this.logger.debug(`Token transfer block number: ${blockNumber}`);
-
-    const updatedOffer = await this.offersRepository.save({
-      ...offer,
-      status: ASK_STATUS.CANCELLED,
-      block_number_cancel: blockNumber.toString(),
-    });
-
-    const newTransfer = this.nftTransferRepository.create({
-      id: uuid(),
-      network: this.config.blockchain.unique.network,
-      collection_id: collectionId.toString(),
-      token_id: tokenId.toString(),
-      address_from: addressFrom,
-      address_to: addressTo,
-      block_number: blockNumber.toString(),
-      created_at: new Date(),
-    });
-
-    await this.nftTransferRepository.save(newTransfer);
-
-    return {
-      id: updatedOffer.id,
-      collectionId: parseInt(updatedOffer.collection_id),
-      tokenId: parseInt(updatedOffer.token_id),
-      price: updatedOffer.price,
-      seller: updatedOffer.address_from,
-    };
   }
 }
