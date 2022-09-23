@@ -5,17 +5,15 @@ import { SignatureType, Account } from '@unique-nft/accounts';
 import { KeyringProvider } from '@unique-nft/accounts/keyring';
 import { KeyringPair } from '@polkadot/keyring/types';
 import { v4 as uuid } from 'uuid';
-import { Sdk } from '@unique-nft/substrate-client';
 
 import { SdkTransferService } from '@app/uniquesdk';
 import { MarketConfig } from '@app/config/market-config';
-import { OffersEntity, BlockchainBlock, NFTTransfer } from '@app/entity';
+import { OffersEntity, BlockchainBlock, NFTTransfer, MarketTrade } from '@app/entity';
 import { ASK_STATUS } from '@app/escrow/constants';
 import { SellingMethod } from '@app/types';
 import { SearchIndexService } from '@app/auction/services/search-index.service';
 import { SdkExtrinsicService, NetworkName } from '@app/uniquesdk';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
-import { InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 
 import { PayOfferDto, PayOfferResponseDto, CreateFiatInput, OfferFiatDto, CancelFiatInput } from './dto';
 
@@ -40,7 +38,10 @@ export class PayOffersService {
   private readonly offersRepository: Repository<OffersEntity>;
   private readonly blockchainBlockRepository: Repository<BlockchainBlock>;
   private readonly nftTransferRepository: Repository<NFTTransfer>;
+  private tradeRepository: Repository<MarketTrade>;
+
   private readonly cko = new Checkout(this.config.payment.checkout.secretKey);
+
   constructor(
     private connection: DataSource,
     @Inject('CONFIG') private config: MarketConfig,
@@ -48,12 +49,14 @@ export class PayOffersService {
     private searchIndexService: SearchIndexService,
     private readonly sdkExtrinsicService: SdkExtrinsicService,
     @InjectSentry() private readonly sentryService: SentryService,
-    @InjectUniqueSDK() private sdk: Sdk,
   ) {
     this.logger = new Logger(PayOffersService.name);
+
     this.offersRepository = this.connection.getRepository(OffersEntity);
     this.blockchainBlockRepository = connection.getRepository(BlockchainBlock);
     this.nftTransferRepository = connection.getRepository(NFTTransfer);
+    this.tradeRepository = connection.manager.getRepository(MarketTrade);
+
     this.auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
     this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.bulkSaleSeed);
   }
@@ -160,17 +163,31 @@ export class PayOffersService {
 
     await this.nftTransferRepository.save(newTransfer);
 
-    await this.offersRepository.update(
-      {
-        id: offer.id,
-      },
-      {
-        status: ASK_STATUS.BOUGHT,
-        address_to: input.buyerAddress,
-        address_from: this.auctionAccount.instance.address,
-        block_number_buy: blockNumber.toString(),
-      },
-    );
+    const updatedOffer = await this.offersRepository.save({
+      ...offer,
+      status: ASK_STATUS.BOUGHT,
+      address_to: input.buyerAddress,
+      address_from: this.auctionAccount.instance.address,
+      block_number_buy: blockNumber.toString(),
+    });
+
+    await this.tradeRepository.save({
+      id: uuid(),
+      collection_id: updatedOffer.collection_id,
+      token_id: updatedOffer.token_id,
+      network: updatedOffer.network,
+      price: `${updatedOffer.price}`,
+      currency: `${payment.currency}`,
+      address_seller: updatedOffer.address_from,
+      address_buyer: updatedOffer.address_to,
+      block_number_ask: updatedOffer.block_number_ask,
+      block_number_buy: updatedOffer.block_number_buy,
+      ask_created_at: new Date(updatedOffer.created_at_ask),
+      buy_created_at: new Date(),
+      originPrice: `${updatedOffer.price}`,
+      status: SellingMethod.Fiat,
+      commission: `0`,
+    });
 
     this.logger.log(
       `{subject:'Got buyKSM fiat', thread:'offer update', collection: ${offer.collection_id.toString()}, token: ${offer.token_id.toString()},
