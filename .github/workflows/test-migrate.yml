@@ -1,0 +1,18 @@
+
+name: Test-migrates
+
+on:
+  push:
+    branches: [ "test-migrates" ]
+  pull_request:
+    branches: [ "test-migrates" ]
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Migrate DB
+    runs-on: self-hosted
+    environment: dev
+    steps:
+      - name: Migrate Postgres
+        run: exit 1
