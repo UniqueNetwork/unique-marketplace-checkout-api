@@ -65,4 +65,9 @@ jobs:
       - uses: oNaiPs/secrets-to-env-action@v1
         with:
           secrets: ${{ toJSON(secrets) }}
-      - run: if [ ! "$(docker service ls -f name='checkout_db' | grep 'checkout_db')" ]; then docker stack deploy -c .github/services/dev.yml ${{ secrets.DOCKER_NETWORK }};else docker service update checkout_db;fi
+      - uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker stack deploy --prune --with-registry-auth -c .github/services/dev.yml ${{ secrets.DOCKER_NETWORK }}
