@@ -36,7 +36,7 @@ export class SdkExtrinsicService {
    * @returns {Promise<SubmitResult>}
    */
   public async submit(tx: string | SubmittableExtrinsic<any>, network: NetworkName): Promise<SubmitResult> {
-    const api = this.getCurrentSdk(network).api as any;
+    const api = this.getCurrentSdk(network).api;
     const extrinsic = typeof tx === 'string' ? api.createType('Extrinsic', tx) : tx;
     const extrinsicHuman = stringify(extrinsic.toHuman());
 
@@ -222,7 +222,7 @@ export class SdkExtrinsicService {
    * @param {NetworkName} network
    * @returns {Sdk}
    */
-  private getCurrentSdk(network: NetworkName): any {
+  private getCurrentSdk(network: NetworkName): Sdk {
     switch (network) {
       case NetworkName.KUSAMA:
         return this.kusama;

@@ -13,7 +13,7 @@ import { KeyringProvider } from '@unique-nft/accounts/keyring';
 @Injectable()
 export class SdkTestService {
   public sdk: Sdk;
-  public api;
+  public api: ApiPromise;
 
   async connect(config: any, network: string, seed?: string) {
     this.sdk = await Sdk.create({ chainWsUrl: config.blockchain[network].wsEndpoint });

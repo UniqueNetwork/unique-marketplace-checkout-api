@@ -25,7 +25,7 @@ import { InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 export class MassSaleService {
   private readonly logger: Logger;
   private readonly blockchainBlockRepository: Repository<BlockchainBlock>;
-  private unique;
+  private unique: Sdk;
   private readonly collectionContractInterface: Interface;
   private readonly marketContractInterface: Interface;
 
