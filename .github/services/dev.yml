@@ -30,7 +30,7 @@ services:
       - UNIQUE_COLLECTION_IDS
     labels:
       - traefik.enable=true
-      - traefik.http.routers.fiat-back-dev.rule=Host("fiat-back-dev.uniquenetwork.dev")
+      - traefik.http.routers.fiat-back-dev.rule=Host("$DOMAIN")
       - traefik.http.routers.fiat-back-dev.entrypoints=web
       - traefik.http.services.fiat-back-dev.loadbalancer.server.port=${API_PORT}
 
