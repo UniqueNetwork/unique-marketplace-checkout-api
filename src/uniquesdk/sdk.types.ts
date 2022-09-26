@@ -1,4 +1,4 @@
-import { Hash } from '@polkadot/types/interfaces';
+import type { Hash } from '@polkadot/types/interfaces/runtime';
 
 export interface IObject {
   [key: string]: any | string | boolean | number | Array<any> | bigint | IObject | IObject[] | Record<string, any> | undefined;

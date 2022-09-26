@@ -4,6 +4,7 @@ import * as path from 'path';
 import { ApiPromise, Keyring } from '@polkadot/api';
 import { cryptoWaitReady, decodeAddress, encodeAddress } from '@polkadot/util-crypto';
 import { IKeyringPair } from '@polkadot/types/types';
+import { KeyringPair } from '@polkadot/keyring/types';
 
 import { TransactionStatus, signTransaction } from './signTransaction';
 import * as tokenUtil from './token';
@@ -220,7 +221,7 @@ const normalizeAccountId = (input: AnyAccountFormat): NormalizedAccountFormat =>
   return { Substrate: input.toString() };
 };
 
-const privateKey = (account: string) => {
+const privateKey = (account: string): KeyringPair => {
   const keyring = new Keyring({ type: 'sr25519' });
 
   return keyring.addFromUri(account);

@@ -7,7 +7,6 @@ import type { ISubmittableResult } from '@polkadot/types/types';
 import { ApiPromise } from '@polkadot/api';
 import { Account } from '@unique-nft/accounts';
 import { stringify } from '@polkadot/util';
-import { Hash } from '@polkadot/types/interfaces';
 
 import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 import { NetworkName, TransferTokenResult } from '@app/uniquesdk/sdk.types';
@@ -103,7 +102,7 @@ export class SdkTransferService {
    * @param {NetworkName} network
    * @returns {ApiPromise}
    */
-  private getApi(network: NetworkName): any {
+  private getApi(network: NetworkName): ApiPromise {
     return network === NetworkName.UNIQUE ? this.unique.api : this.kusama.api;
   }
 
@@ -151,7 +150,7 @@ export class SdkTransferService {
       tokenId,
       addressFrom: parsed.from,
       addressTo: parsed.to,
-      blockHash: blockHash as any as Hash,
+      blockHash,
       blockNumber,
       isCompleted,
       isError: submittableResult.isError,
