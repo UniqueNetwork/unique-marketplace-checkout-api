@@ -1,6 +1,6 @@
 FROM node:16-alpine
 LABEL maintainer="Unique.Network"
-
+RUN apk add --no-cache libc6-compat g++ make py3-pip
 WORKDIR /src
 
 COPY ./package.json .
