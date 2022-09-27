@@ -5,6 +5,7 @@ import { Keyring } from '@polkadot/api';
 import { Observable, Subscriber } from 'rxjs';
 import { DataSource, Repository } from 'typeorm';
 import { Interface } from 'ethers/lib/utils';
+import { SignedBlock } from '@polkadot/types/interfaces';
 
 import { MassAuctionSaleDTO, MassAuctionSaleResultDto, MassFixPriceSaleDTO, MassFixPriceSaleResultDto } from '../dto';
 import { CollectionsService } from './collections.service';
@@ -189,7 +190,7 @@ export class MassSaleService {
             if (status.isFinalized) {
               const blockHash = status.asFinalized;
 
-              const block = await this.unique.api.rpc.chain.getBlock(blockHash);
+              const block: SignedBlock = await this.unique.api.rpc.chain.getBlock(blockHash);
 
               const blockNumber = block.block.header.number.toBigInt();
 

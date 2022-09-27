@@ -7,6 +7,7 @@ import type { ISubmittableResult } from '@polkadot/types/types';
 import { ApiPromise } from '@polkadot/api';
 import { Account } from '@unique-nft/accounts';
 import { stringify } from '@polkadot/util';
+import { SignedBlock } from '@polkadot/types/interfaces';
 
 import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
 import { NetworkName, TransferTokenResult } from '@app/uniquesdk/sdk.types';
@@ -130,11 +131,11 @@ export class SdkTransferService {
         collectionId,
         tokenId,
       },
-      { signer: fromAccount.getSigner() },
+      { signer: fromAccount },
     );
 
     const blockHash = submittableResult.status.asInBlock;
-    const signedBlock = await this.unique.api.rpc.chain.getBlock(submittableResult.status.asInBlock);
+    const signedBlock: SignedBlock = await this.unique.api.rpc.chain.getBlock(submittableResult.status.asInBlock);
     const blockNumber = signedBlock.block.header.number.toBigInt();
 
     if (isCompleted) {

@@ -4,7 +4,9 @@ import { stringify } from '@polkadot/util';
 import { ApiPromise } from '@polkadot/api';
 import { IExtrinsic } from '@polkadot/types/types';
 import type { ExtrinsicStatus } from '@polkadot/types/interfaces/author';
-import { Hash } from '@polkadot/types/interfaces';
+import { Hash, SignedBlock } from '@polkadot/types/interfaces';
+import type { Vec } from '@polkadot/types-codec';
+import type { FrameSystemEventRecord } from '@polkadot/types/lookup';
 import { Sdk } from '@unique-nft/substrate-client';
 import { SignerPayloadJSON, HexString, ISubmittableResult } from '@unique-nft/substrate-client/types';
 import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants/sdk.injectors';
@@ -41,10 +43,11 @@ export class SdkExtrinsicService {
     const extrinsicHuman = stringify(extrinsic.toHuman());
 
     const blockHash = await this.submitWatch(api, extrinsic);
-    const signedBlock = await api.rpc.chain.getBlock(blockHash);
+
+    const signedBlock: SignedBlock = await api.rpc.chain.getBlock(blockHash);
 
     const apiAt = await api.at(blockHash);
-    const eventsAtBlock = await apiAt.query.system.events();
+    const eventsAtBlock: Vec<FrameSystemEventRecord> = await apiAt.query.system.events();
 
     const finalizedExtrinsicIndex = signedBlock.block.extrinsics.findIndex((ex) => ex.hash.eq(extrinsic.hash));
 
@@ -211,7 +214,7 @@ export class SdkExtrinsicService {
    * @returns {Promise<bigint>}
    */
   private async getBlockNumber(submittableResult: ISubmittableResult, sdk: Sdk): Promise<bigint> {
-    const signedBlock = await sdk.api.rpc.chain.getBlock(submittableResult.status.asInBlock);
+    const signedBlock: SignedBlock = await sdk.api.rpc.chain.getBlock(submittableResult.status.asInBlock);
     return signedBlock.block.header.number.toBigInt();
   }
 
