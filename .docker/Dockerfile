@@ -4,6 +4,7 @@ RUN apk add --no-cache libc6-compat g++ make py3-pip
 WORKDIR /src
 
 COPY ./package.json .
+COPY ./package-lock.json .
 
 RUN npm install husky -g
 

@@ -8,7 +8,6 @@
 Dockerfile
 .editorconfig
 docker-compose.*
-package-lock.json
 yarn.lock
 src/config/*
 !src/config/index.ts
