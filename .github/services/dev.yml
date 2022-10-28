@@ -33,6 +33,9 @@ services:
       - traefik.http.routers.fiat-back-dev.rule=Host("$DOMAIN")
       - traefik.http.routers.fiat-back-dev.entrypoints=web
       - traefik.http.services.fiat-back-dev.loadbalancer.server.port=${API_PORT}
+      - traefik.http.routers.fiat-back-dev.middlewares=traefik-compress
+      - traefik.http.middlewares.traefik-compress.compress=true
+
 
 volumes:
   db:
