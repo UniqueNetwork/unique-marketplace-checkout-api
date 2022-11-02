@@ -14,6 +14,7 @@ import { SellingMethod } from '@app/types';
 import { SearchIndexService } from '@app/auction/services/search-index.service';
 import { SdkExtrinsicService, NetworkName } from '@app/uniquesdk';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
+import { encodeAddress } from '@polkadot/util-crypto';
 
 import { PayOfferDto, PayOfferResponseDto, CreateFiatInput, OfferFiatDto, CancelFiatInput } from './dto';
 
@@ -155,8 +156,8 @@ export class PayOffersService {
       network: this.config.blockchain.unique.network,
       collection_id: collectionId.toString(),
       token_id: tokenId.toString(),
-      address_from: addressFrom,
-      address_to: addressTo,
+      address_from: encodeAddress(addressFrom),
+      address_to: encodeAddress(addressTo),
       block_number: blockNumber.toString(),
       created_at: new Date(),
     });
@@ -200,8 +201,11 @@ export class PayOffersService {
   }
 
   async createFiat(createFiatInput: CreateFiatInput): Promise<OfferFiatDto> {
-    const allowedAccounts = [...this.config.adminList.split(',').map((item) => item.trim()), this.bulkSaleAccount.instance.address];
-    if (!allowedAccounts.includes(createFiatInput.signerPayloadJSON.address)) {
+    const allowedAccounts = [
+      ...this.config.adminList.split(',').map((item) => encodeAddress(item.trim())),
+      this.bulkSaleAccount.instance.address,
+    ];
+    if (!allowedAccounts.includes(encodeAddress(createFiatInput.signerPayloadJSON.address))) {
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
         message: 'Wrong signer address',
@@ -249,8 +253,8 @@ export class PayOffersService {
         network: this.config.blockchain.unique.network,
         collection_id: collectionId.toString(),
         token_id: tokenId.toString(),
-        address_from: addressFrom,
-        address_to: addressTo,
+        address_from: encodeAddress(addressFrom),
+        address_to: encodeAddress(addressTo),
         block_number: blockNumber.toString(),
         created_at: new Date(),
       });
@@ -266,8 +270,8 @@ export class PayOffersService {
         network: this.config.blockchain.unique.network,
         price: (createFiatInput.price * 100).toString(),
         currency: createFiatInput.currency,
-        address_from: addressFrom,
-        address_to: addressTo,
+        address_from: encodeAddress(addressFrom),
+        address_to: encodeAddress(addressTo),
         block_number_ask: blockNumber.toString(),
       });
 
@@ -283,7 +287,7 @@ export class PayOffersService {
         collectionId: parseInt(savedOffer.collection_id),
         tokenId: parseInt(savedOffer.token_id),
         price: savedOffer.price,
-        seller: savedOffer.address_to,
+        seller: encodeAddress(savedOffer.address_to),
       };
     } catch (error) {
       throw new BadRequestException(error.message);
@@ -295,7 +299,7 @@ export class PayOffersService {
       where: {
         collection_id: cancelFiatInput.collectionId,
         token_id: cancelFiatInput.tokenId,
-        address_from: cancelFiatInput.sellerAddress,
+        address_from: encodeAddress(cancelFiatInput.sellerAddress),
         address_to: this.auctionAccount.instance.address,
         status: ASK_STATUS.ACTIVE,
         type: SellingMethod.Fiat,
@@ -338,8 +342,8 @@ export class PayOffersService {
         network: this.config.blockchain.unique.network,
         collection_id: collectionId.toString(),
         token_id: tokenId.toString(),
-        address_from: addressFrom,
-        address_to: addressTo,
+        address_from: encodeAddress(addressFrom),
+        address_to: encodeAddress(addressTo),
         block_number: blockNumber.toString(),
         created_at: new Date(),
       });

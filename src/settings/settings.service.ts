@@ -70,7 +70,7 @@ export class SettingsService {
 
     const settings: SettingsDto = {
       marketType: marketType,
-      administrators: this.adminList,
+      administrators,
       mainSaleSeedAddress: mainSaleAddress,
       blockchain: {
         escrowAddress: await seedToAddress(blockchain.escrowSeed),
