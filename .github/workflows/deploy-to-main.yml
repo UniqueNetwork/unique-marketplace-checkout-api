@@ -39,9 +39,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build
-        run: docker build -t ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev . -f .docker/Dockerfile
+        run: docker build -t ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:main . -f .docker/Dockerfile
       - name: Push to GitHub Registry
-        run: docker push ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev
+        run: docker push ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:main
 
   migrate:
     name: Migrate DB
@@ -67,4 +67,4 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: docker stack deploy --with-registry-auth -c .github/services/dev.yml ${{ secrets.DOCKER_NETWORK }}
+      - run: docker stack deploy --with-registry-auth -c .github/services/main.yml ${{ secrets.DOCKER_NETWORK }}
