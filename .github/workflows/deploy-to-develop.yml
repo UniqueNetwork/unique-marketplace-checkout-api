@@ -3,14 +3,13 @@ name: Deploy to Develop
 on:
   push:
     branches:
-      - develop
+      - main
   workflow_dispatch:
 
 jobs:
   before:
     name: Before
     runs-on: self-hosted
-    environment: dev
     env:
       DOCKER_NETWORK: ${{ secrets.DOCKER_NETWORK }}
       DB_NAME: ${{ secrets.DB_NAME }}
@@ -48,7 +47,6 @@ jobs:
     name: Migrate DB
     needs: build
     runs-on: self-hosted
-    environment: dev
     steps:
       - name: Migrate Postgres
         run: docker run --rm --network=${{ secrets.DOCKER_NETWORK }} -e POSTGRES_URL="postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}" ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev npx typeorm migration:run -d dist/database/connection-options.js
@@ -57,7 +55,6 @@ jobs:
     name: Deploy
     needs: migrate
     runs-on: self-hosted
-    environment: dev
     env:
       POSTGRES_URL: "postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:${{ secrets.DB_PORT }}/${{ secrets.DB_NAME }}"
     steps:
