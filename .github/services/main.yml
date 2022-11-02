@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   back:
-    image: ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev
+    image: ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:main
     networks:
       - default
     deploy:
