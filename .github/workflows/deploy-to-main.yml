@@ -1,4 +1,4 @@
-name: Deploy to Develop
+name: Deploy to main branch
 
 on:
   push:
