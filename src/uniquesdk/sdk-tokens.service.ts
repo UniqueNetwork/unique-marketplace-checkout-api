@@ -1,10 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Sdk } from '@unique-nft/substrate-client';
-import { AccountTokensResult } from '@unique-nft/substrate-client/tokens';
+import { AccountTokensResult, UniqueTokenToCreateEx } from '@unique-nft/substrate-client/tokens';
 import { CollectionInfoWithSchema, TokenByIdResult } from '@unique-nft/substrate-client/tokens';
 
 import { InjectKusamaSDK, InjectUniqueSDK } from '@app/uniquesdk/constants';
 import { SdkCollectionService } from './sdk-collections.service';
+import { Address, ISubmittableResult, SubmittableResultCompleted, TokenIdArguments } from '@unique-nft/substrate-client/types';
+import { Account } from '@unique-nft/accounts';
+import { KeyringPair } from '@polkadot/keyring/types';
+import { SdkExtrinsicService } from './sdk-extrinsic.service';
 
 @Injectable()
 export class SdkTokensService {
@@ -16,6 +20,7 @@ export class SdkTokensService {
     @InjectUniqueSDK() private readonly unique: Sdk,
     @InjectKusamaSDK() private readonly kusama: Sdk,
     private readonly sdkCollections: SdkCollectionService,
+    private readonly sdkExtrinsic: SdkExtrinsicService,
   ) {
     this.logger = new Logger('SdkStageService');
   }
@@ -54,6 +59,55 @@ export class SdkTokensService {
       collectionId: collection,
       address: address,
     });
+  }
+
+  async createTokenToOwner(
+    collectionId: number,
+    data: UniqueTokenToCreateEx,
+    ownerAddress: Address,
+    signer: Account<KeyringPair>,
+  ): Promise<SubmittableResultCompleted<TokenIdArguments>> {
+    return this.sdk.tokens.create.submitWaitResult(
+      { collectionId: collectionId, data, address: signer.instance.address, owner: ownerAddress },
+      { signer },
+    );
+  }
+
+  async createTokenToBuyer(
+    tokenId: number,
+    collectionId: number,
+    buyerAddress: string,
+    creator: Account<KeyringPair>,
+  ): Promise<{
+    blockNumber: bigint;
+    submittableResult: ISubmittableResult;
+    isCompleted: true;
+    parsed: TokenIdArguments;
+  }> {
+    const tokenData = await this.unique.tokens.get({ collectionId, tokenId });
+
+    const mapValues = new Map();
+
+    Object.entries(tokenData.attributes).forEach(([key, value]) => {
+      mapValues.set(key, value.rawValue);
+    });
+
+    const result = await this.createTokenToOwner(
+      collectionId,
+      {
+        image: tokenData.image,
+        encodedAttributes: Object.fromEntries(mapValues),
+      },
+      buyerAddress,
+      creator,
+    );
+
+    const blockNumber = await this.sdkExtrinsic.getBlockNumber(result.submittableResult, this.sdk);
+
+    return {
+      ...result,
+      blockNumber,
+    };
   }
 
   disconnect() {

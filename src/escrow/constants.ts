@@ -3,6 +3,8 @@ export const ASK_STATUS = {
   CANCELLED: 'cancelled',
   BOUGHT: 'bought',
   REMOVED_BY_ADMIN: 'removed_by_admin',
+  PENDING: 'pending',
+  ERROR: 'error',
 };
 
 export const MONEY_TRANSFER_TYPES = {

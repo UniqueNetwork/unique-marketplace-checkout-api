@@ -1,6 +1,6 @@
 {
   "name": "unique-marketplace-api",
-  "version": "1.8.206",
+  "version": "1.8.212",
   "description": "Backend project for unique marketplace",
   "author": "Unique Network",
   "private": true,
@@ -67,7 +67,7 @@
     "@unique-nft/accounts": "^0.3.1",
     "@unique-nft/opal-testnet-types": "^0.5.3",
     "@unique-nft/quartz-mainnet-types": "^0.6.1",
-    "@unique-nft/substrate-client": "^0.5.7",
+    "@unique-nft/substrate-client": "0.5.10",
     "@unique-nft/unique-mainnet-types": "^0.6.3",
     "checkout-sdk-node": "^2.0.2",
     "class-transformer": "0.5.1",
