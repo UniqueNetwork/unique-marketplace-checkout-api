@@ -213,7 +213,7 @@ export class SdkExtrinsicService {
    * @param {Sdk} sdk
    * @returns {Promise<bigint>}
    */
-  private async getBlockNumber(submittableResult: ISubmittableResult, sdk: Sdk): Promise<bigint> {
+  public async getBlockNumber(submittableResult: ISubmittableResult, sdk: Sdk): Promise<bigint> {
     const signedBlock: SignedBlock = await sdk.api.rpc.chain.getBlock(submittableResult.status.asInBlock);
     return signedBlock.block.header.number.toBigInt();
   }

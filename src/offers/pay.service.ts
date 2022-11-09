@@ -6,7 +6,7 @@ import { KeyringProvider } from '@unique-nft/accounts/keyring';
 import { KeyringPair } from '@polkadot/keyring/types';
 import { v4 as uuid } from 'uuid';
 
-import { SdkTransferService } from '@app/uniquesdk';
+import { SdkTokensService, SdkTransferService } from '@app/uniquesdk';
 import { MarketConfig } from '@app/config/market-config';
 import { OffersEntity, BlockchainBlock, NFTTransfer, MarketTrade } from '@app/entity';
 import { ASK_STATUS } from '@app/escrow/constants';
@@ -49,6 +49,7 @@ export class PayOffersService {
     private readonly sdkTransferService: SdkTransferService,
     private searchIndexService: SearchIndexService,
     private readonly sdkExtrinsicService: SdkExtrinsicService,
+    private readonly sdkTokensService: SdkTokensService,
     @InjectSentry() private readonly sentryService: SentryService,
   ) {
     this.logger = new Logger(PayOffersService.name);
@@ -81,14 +82,24 @@ export class PayOffersService {
       });
     }
 
+    const newOffer = this.offersRepository.create({
+      ...offer,
+      id: uuid(),
+      token_id: (Number(offer.token_id) * -1).toString(),
+      status: ASK_STATUS.PENDING,
+      collection_data: { parentTokenId: offer.token_id } as any,
+    });
+
+    await this.offersRepository.save(newOffer);
+
     const payment = (await this.cko.payments
       .request({
         source: {
           token: input.tokenCard,
         },
-        currency: offer.currency,
-        amount: parseInt(offer.price),
-        reference: offer.id,
+        currency: newOffer.currency,
+        amount: parseInt(newOffer.price),
+        reference: newOffer.id,
         // name plus email are unique
         customer: {
           name: input.buyerAddress,
@@ -111,6 +122,7 @@ export class PayOffersService {
       })) as PaymentsResult;
 
     if (!payment.approved) {
+      await this.offersRepository.update(newOffer.id, { status: ASK_STATUS.ERROR as string });
       throw new BadRequestException({
         statusCode: payment.response_code,
         message: 'Offer purchase not approved',
@@ -128,14 +140,14 @@ export class PayOffersService {
       });
     }
 
-    const { isError, blockNumber, collectionId, tokenId, addressFrom, addressTo } = await this.sdkTransferService.transferToken(
-      this.auctionAccount,
+    const { isCompleted, parsed, blockNumber } = await this.sdkTokensService.createTokenToBuyer(
+      Number(offer.token_id),
+      Number(offer.collection_id),
       input.buyerAddress,
-      parseInt(offer.collection_id),
-      parseInt(offer.token_id),
+      this.bulkSaleAccount,
     );
 
-    if (isError) {
+    if (!isCompleted) {
       await this.cko.payments
         .refund(payment.id, {
           amount: parseInt(offer.price) / 100,
@@ -151,21 +163,9 @@ export class PayOffersService {
       });
     }
 
-    const newTransfer = this.nftTransferRepository.create({
-      id: uuid(),
-      network: this.config.blockchain.unique.network,
-      collection_id: collectionId.toString(),
-      token_id: tokenId.toString(),
-      address_from: encodeAddress(addressFrom),
-      address_to: encodeAddress(addressTo),
-      block_number: blockNumber.toString(),
-      created_at: new Date(),
-    });
-
-    await this.nftTransferRepository.save(newTransfer);
-
     const updatedOffer = await this.offersRepository.save({
-      ...offer,
+      ...newOffer,
+      token_id: parsed.tokenId.toString(),
       status: ASK_STATUS.BOUGHT,
       address_to: input.buyerAddress,
       address_from: this.auctionAccount.instance.address,
@@ -190,9 +190,14 @@ export class PayOffersService {
       commission: `0`,
     });
 
+    await this.searchIndexService.addSearchIndexIfNotExists({
+      collectionId: Number(updatedOffer.collection_id),
+      tokenId: Number(updatedOffer.token_id),
+    });
+
     this.logger.log(
-      `{subject:'Got buyKSM fiat', thread:'offer update', collection: ${offer.collection_id.toString()}, token: ${offer.token_id.toString()},
-      )}', status: ${ASK_STATUS.BOUGHT}, log:'buyKSMfiat' }`,
+      `{subject:'Got buyKSM fiat', thread:'offer update', collection: ${updatedOffer.collection_id.toString()}, token: ${updatedOffer.token_id.toString()},
+          )}', status: ${ASK_STATUS.BOUGHT}, log:'buyKSMfiat' }`,
     );
 
     return {
