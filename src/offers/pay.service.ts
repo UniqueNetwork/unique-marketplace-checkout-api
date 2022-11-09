@@ -89,7 +89,7 @@ export class PayOffersService {
       id: uuid(),
       token_id: (Number(offer.token_id) * -1).toString(),
       status: ASK_STATUS.PENDING,
-      collection_data: { parentTokenId: offer.token_id } as any,
+      collection_data: { copiedFromTokenId: offer.token_id } as any,
     });
 
     await this.offersRepository.save(newOffer);
