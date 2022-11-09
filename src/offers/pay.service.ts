@@ -71,7 +71,7 @@ export class PayOffersService {
         type: SellingMethod.Fiat,
         collection_id: input.collectionId,
         token_id: input.tokenId,
-        address_to: this.auctionAccount.instance.address,
+        address_to: encodeAddress(this.auctionAccount.instance.address),
         status: ASK_STATUS.ACTIVE,
       },
     });
