@@ -34,6 +34,7 @@ type PaymentsResult = {
 export class PayOffersService {
   private auctionAccount: Account<KeyringPair>;
   private bulkSaleAccount: Account<KeyringPair>;
+  private escrowAccount: Account<KeyringPair>;
 
   private logger: Logger;
   private readonly offersRepository: Repository<OffersEntity>;
@@ -61,6 +62,7 @@ export class PayOffersService {
 
     this.auctionAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.auction.seed);
     this.bulkSaleAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.bulkSaleSeed);
+    this.escrowAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.blockchain.escrowSeed);
   }
 
   async payOffer(input: PayOfferDto): Promise<PayOfferResponseDto> {
@@ -144,7 +146,7 @@ export class PayOffersService {
       Number(offer.token_id),
       Number(offer.collection_id),
       input.buyerAddress,
-      this.bulkSaleAccount,
+      this.escrowAccount,
     );
 
     if (!isCompleted) {
