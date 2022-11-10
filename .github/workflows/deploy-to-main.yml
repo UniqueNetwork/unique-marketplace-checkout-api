@@ -49,7 +49,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Migrate Postgres
-        run: docker run --rm --network=${{ secrets.DOCKER_NETWORK }} -e POSTGRES_URL="postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}" ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:dev npx typeorm migration:run -d dist/database/connection-options.js
+        run: docker run --rm --network=${{ secrets.DOCKER_NETWORK }} -e POSTGRES_URL="postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}" ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:main npx typeorm migration:run -d dist/database/connection-options.js
 
   deploy:
     name: Deploy
