@@ -30,12 +30,6 @@ export class PayOfferDto {
   collectionId: string;
 }
 
-export class PayOfferResponseDto {
-  @ApiProperty()
-  @IsBoolean()
-  isOk: boolean;
-}
-
 export class BadRequestResponse {
   @ApiProperty({ default: HttpStatus.BAD_REQUEST })
   statusCode = HttpStatus.BAD_REQUEST;

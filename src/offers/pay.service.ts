@@ -16,7 +16,7 @@ import { SdkExtrinsicService, NetworkName } from '@app/uniquesdk';
 import { InjectSentry, SentryService } from '@app/utils/sentry';
 import { encodeAddress } from '@polkadot/util-crypto';
 
-import { PayOfferDto, PayOfferResponseDto, CreateFiatInput, OfferFiatDto, CancelFiatInput } from './dto';
+import { PayOfferDto, CreateFiatInput, OfferFiatDto, CancelFiatInput, OfferEntityDto } from './dto';
 
 type PaymentsResult = {
   id: string;
@@ -65,7 +65,7 @@ export class PayOffersService {
     this.escrowAccount = new KeyringProvider({ type: SignatureType.Sr25519 }).addSeed(this.config.blockchain.escrowSeed);
   }
 
-  async payOffer(input: PayOfferDto): Promise<PayOfferResponseDto> {
+  async payOffer(input: PayOfferDto): Promise<OfferEntityDto> {
     const offer = await this.offersRepository.findOne({
       where: {
         type: SellingMethod.Fiat,
@@ -204,9 +204,7 @@ export class PayOffersService {
           )}', status: ${ASK_STATUS.BOUGHT}, log:'buyKSMfiat' }`,
     );
 
-    return {
-      isOk: true,
-    };
+    return OfferEntityDto.fromOffersEntity(updatedOffer);
   }
 
   async createFiat(createFiatInput: CreateFiatInput): Promise<OfferFiatDto> {

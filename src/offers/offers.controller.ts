@@ -23,7 +23,6 @@ import {
   OffersFilter,
   OfferAttributesDto,
   OfferAttributes,
-  PayOfferResponseDto,
   PayOfferDto,
   BadRequestResponse,
   ConflictResponse,
@@ -101,9 +100,9 @@ export class OffersController {
     summary: 'To pay offer to from card',
     description: fs.readFileSync('docs/fiat_pay.md').toString(),
   })
-  @ApiResponse({ type: PayOfferResponseDto, status: HttpStatus.CREATED })
+  @ApiResponse({ type: OfferEntityDto, status: HttpStatus.CREATED })
   @Post('pay')
-  async pay(@Body() input: PayOfferDto): Promise<PayOfferResponseDto> {
+  async pay(@Body() input: PayOfferDto): Promise<OfferEntityDto> {
     return this.payOffersService.payOffer(input);
   }
 
