@@ -81,4 +81,7 @@ export class OffersEntity {
 
   @OneToOne(() => SearchIndex)
   search_index: SearchIndex;
+
+  @Column('bigint', { name: 'copiesCount', nullable: true })
+  copiesCount: string;
 }
