@@ -198,7 +198,7 @@ export class PayOffersService {
       tokenId: Number(updatedOffer.token_id),
     });
 
-    await this.offersRepository.update(offer.id, { copiesCount: offer.copiesCount + 1 });
+    await this.offersRepository.update(offer.id, { copiesCount: (parseInt(offer.copiesCount || '0') + 1).toString() });
 
     this.logger.log(
       `{subject:'Got buyKSM fiat', thread:'offer update', collection: ${updatedOffer.collection_id.toString()}, token: ${updatedOffer.token_id.toString()},
