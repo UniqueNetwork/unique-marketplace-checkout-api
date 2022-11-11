@@ -67,4 +67,4 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: docker stack deploy --with-registry-auth -c .github/services/main.yml ${{ secrets.DOCKER_NETWORK }}
+      - run: docker stack deploy --with-registry-auth -c .github/services/main.yml ${{ secrets.DOCKER_NETWORK }} && docker system prune -a
