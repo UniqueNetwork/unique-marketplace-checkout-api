@@ -90,6 +90,7 @@ export class PayOffersService {
       token_id: (Number(offer.token_id) * -1).toString(),
       status: ASK_STATUS.PENDING,
       collection_data: { copiedFromTokenId: offer.token_id } as any,
+      copiesCount: null,
     });
 
     await this.offersRepository.save(newOffer);
