@@ -277,6 +277,7 @@ export class OffersFilterService {
         'v_offers_search_auction_status as auction_status',
         'v_offers_search_auction_stop_at as auction_stop_at',
         'v_offers_search_offer_created_at_ask as offer_created_at_ask',
+        'v_offers_search_offer_copies_count as offer_copies_count',
       ])
       .distinct()
       .from(`(${query.getQuery()})`, '_filter')

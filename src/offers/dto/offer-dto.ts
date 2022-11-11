@@ -81,6 +81,10 @@ export class OfferEntityDto {
   @Type(() => TokenDescriptionDto)
   tokenDescription: TokenDescriptionDto;
 
+  @ApiProperty({ description: 'Number of copies sold', example: 4 })
+  @Expose()
+  copiesCount: number;
+
   static fromOffersEntity(offersData: OffersEntity): OfferEntityDto {
     const plain: Record<string, any> = {
       ...offersData,
@@ -92,6 +96,7 @@ export class OfferEntityDto {
       creationDate: offersData.created_at,
       status: offersData.status,
       types: offersData.type,
+      copiesCount: offersData.copiesCount,
     };
 
     if (offersData?.bids?.length) {

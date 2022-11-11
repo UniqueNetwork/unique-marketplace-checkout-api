@@ -88,6 +88,9 @@ export class OfferFilters {
   @ViewColumn({ name: 'offer_updated_at' })
   offerUpdatedAt: Date;
 
+  @ViewColumn({ name: 'offer_copies_count' })
+  offerCopiesCount: number;
+
   @ViewColumn({ name: 'auction_id' })
   auctionId: string;
 

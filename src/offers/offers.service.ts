@@ -195,6 +195,7 @@ export class OffersService {
           status: item.offer_status,
           type: item.offer_type,
           price: item.offer_price,
+          copiesCount: item.offer_copies_count ? parseInt(item.offer_copies_count) : 0,
           currency: +item.offer_currency,
           address_from: item.offer_address_from,
           created_at: new Date(item.offer_created_at_ask),
