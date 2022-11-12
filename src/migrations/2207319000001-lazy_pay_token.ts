@@ -1,6 +1,8 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class lazyPayToken1668054011132 implements MigrationInterface {
+export class LazyPayToken_2207319000001 implements MigrationInterface {
+
+  name = 'LazyPayToken_2207319000001';
   public async up(queryRunner: QueryRunner): Promise<void> {
     // await queryRunner.query(`ALTER TABLE public.offers ADD "copiesCount" int8 NULL`);
   }
