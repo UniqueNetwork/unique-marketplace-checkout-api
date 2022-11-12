@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class updateOffersView1668139561168 implements MigrationInterface {
-  name = 'updateOffersView1668139561168';
+export class UpdateOffersView_2207319000002 implements MigrationInterface {
+  name = 'UpdateOffersView_2207319000002';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
   //   await queryRunner.query(`DROP VIEW "v_offers_search"`);
