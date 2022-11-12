@@ -51,9 +51,9 @@ export class updateOffersView1668139561168 implements MigrationInterface {
   //          FROM search_index sf
   //         WHERE sf.type <> 'ImageURL'::search_index_type_enum) search_filter ON offer.network::text = search_filter.network::text AND offer.collection_id = search_filter.collection_id AND offer.token_id = search_filter.token_id
   //    LEFT JOIN auction_bids bid ON bid.auction_id = offer.id`);
-  // }
+  }
 
-  // public async down(queryRunner: QueryRunner): Promise<void> {
+  public async down(queryRunner: QueryRunner): Promise<void> {
   //   await queryRunner.query(`DROP VIEW "v_offers_search"`);
   //   await queryRunner.query(`CREATE VIEW "v_offers_search" AS  SELECT DISTINCT offer.id AS offer_id,
   //   offer.status AS offer_status,
