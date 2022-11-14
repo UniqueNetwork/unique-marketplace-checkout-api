@@ -96,6 +96,7 @@ export class SdkTokensService {
       collectionId,
       {
         image: tokenData.image,
+        video: tokenData.video,
         encodedAttributes: Object.fromEntries(mapValues),
       },
       buyerAddress,
