@@ -4,10 +4,12 @@ services:
     image: ghcr.io/uniquenetwork/unique-marketplace-checkout-api/checkout-market-back:main
     networks:
       - default
+      - checkout
     deploy:
       replicas: 1
       placement:
         constraints: [node.hostname == ip-172-31-27-233]
+    container_name: backend
     environment:
       - POSTGRES_URL
       - NODE_ENV

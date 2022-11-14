@@ -3,7 +3,7 @@ services:
   traefik:
     image: traefik:latest
     ports:
-      - 80:80
+      - 8080:80
     deploy:
       replicas: 1
       placement:
