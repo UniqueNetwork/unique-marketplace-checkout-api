@@ -92,16 +92,18 @@ export class SdkTokensService {
       mapValues.set(key, value.rawValue);
     });
 
-    const result = await this.createTokenToOwner(
-      collectionId,
-      {
-        image: tokenData.image,
-        video: tokenData.video,
-        encodedAttributes: Object.fromEntries(mapValues),
-      },
-      buyerAddress,
-      creator,
-    );
+    const data = tokenData?.video
+      ? {
+          image: tokenData.image,
+          video: tokenData.video,
+          encodedAttributes: Object.fromEntries(mapValues),
+        }
+      : {
+          image: tokenData.image,
+          encodedAttributes: Object.fromEntries(mapValues),
+        };
+
+    const result = await this.createTokenToOwner(collectionId, data, buyerAddress, creator);
 
     const blockNumber = await this.sdkExtrinsic.getBlockNumber(result.submittableResult, this.sdk);
 
